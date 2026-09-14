@@ -63,6 +63,45 @@ npm run android    # terminal 2: build + install
 That file is gitignored on purpose — it is the one file that must differ per machine.
 Never commit it.
 
+### No Android phone? Use the emulator.
+
+Everything Tether needs works on an emulator: system overlays, the accessibility
+service, foreground services, and network. You do **not** need a physical device to
+develop or to verify any of the three slices.
+
+Create an AVD once in Android Studio (Device Manager → any Pixel, **API 34/35,
+Google APIs**), then:
+
+```bash
+./scripts/emulator.sh boot      # start it and wait for boot
+./scripts/emulator.sh install   # build, install, and grant ALL permissions
+./scripts/emulator.sh shot      # screenshot to a file
+```
+
+`install` grants the overlay, notification and accessibility permissions **via
+adb**, so you skip tapping through three system Settings screens on every
+reinstall. That alone saves minutes per iteration.
+
+Test targets: Google APIs images ship with **YouTube** (already in the default
+blocklist) and **Chrome**, so you can verify blocking and the widget without
+installing anything.
+
+**The one gotcha:** Android silently clears
+`enabled_accessibility_services` if you write it while the app is stopped, or if
+you force-stop the app afterwards. Start the app first, then grant — which is what
+`./scripts/emulator.sh grant` does. If blocking mysteriously stops working, run
+that again.
+
+### What the emulator cannot tell you
+
+- **Gesture feel.** The snake drag is the demo; judge it on hardware if you can
+  borrow a phone for ten minutes.
+- **Real performance.** The emulator is slower than a modern phone, so jank there
+  is not proof of jank on device (and smoothness there is not proof of smoothness).
+- **Vibration.** Haptics are silently ignored.
+- **Battery-optimisation kills.** The emulator will not reproduce an OEM killing
+  your foreground service.
+
 ### Clone into a path with no spaces
 
 `~/code/tether` or `C:\dev\tether` — good.
