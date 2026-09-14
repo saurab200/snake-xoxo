@@ -1,5 +1,3 @@
-# snake-xoxo
-it a productivity app
 # Tether — Hackathon Task Split (3 people)
 
 A focus app: a draggable "snake" at the top of the screen sets a focus timer, which blocks social media apps and surfaces productivity tool widgets (starting with Canvas) in the corner of the screen.
