@@ -16,7 +16,7 @@ import {
   RemindersApi,
 } from '../native';
 import {WIDGET_LAYOUT} from '../overlays/WidgetOverlay';
-import {startSnake} from '../state/bootstrap';
+import {rearm, startSnake} from '../state/bootstrap';
 import {Storage} from '../state/storage';
 import {formatRemaining, useFocusSession} from '../state/useFocusSession';
 
@@ -96,9 +96,16 @@ export default function HomeScreen() {
         )}
         <Button
           label="Re-pin snake"
-          onPress={() => startSnake()}
+          onPress={() => {
+            startSnake();
+            rearm();
+          }}
           muted
         />
+        <Text style={styles.hint}>
+          A ✕ sits in the top-right corner while the snake is up. Tap it twice to
+          stop everything — session, lockout and overlays — from anywhere.
+        </Text>
       </Section>
 
       <Section title="3 · Session">

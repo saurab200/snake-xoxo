@@ -74,8 +74,23 @@ object Reminders {
      * Returns the first reminder that has just fallen due, marking it fired so it
      * cannot trigger twice. Called once per second from TetherService.
      */
+    /** A reminder more than this far overdue is stale -- see takeDue. */
+    private const val STALE_AFTER_MS = 10 * 60_000L
+
     fun takeDue(context: Context, now: Long = System.currentTimeMillis()): Reminder? {
         val current = all(context)
+
+        // Only fire reminders that came due recently. If the service was stopped
+        // (the kill switch does exactly that) a reminder whose time passed while
+        // it was off would otherwise ambush the user with a lockout the moment
+        // they restart. Stale ones are marked fired and skipped.
+        val stale = current.filter { !it.fired && it.dueAtMs in 1 until (now - STALE_AFTER_MS) }
+        if (stale.isNotEmpty()) {
+            val staleIds = stale.map { it.id }.toSet()
+            save(context, current.map { if (it.id in staleIds) it.copy(fired = true) else it })
+            return takeDue(context, now)
+        }
+
         val due = current.firstOrNull { !it.fired && it.dueAtMs in 1..now } ?: return null
         save(context, current.map { if (it.id == due.id) it.copy(fired = true) else it })
         return due

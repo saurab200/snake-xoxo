@@ -31,6 +31,18 @@ object OverlayManager {
     private val main = Handler(Looper.getMainLooper())
     private val views = mutableMapOf<String, ReactRootView>()
 
+    /** Last layout params per overlay, needed to re-add a window when raising it. */
+    private val params = mutableMapOf<String, WindowManager.LayoutParams>()
+
+    /**
+     * Overlays that must stay above every other overlay.
+     *
+     * Window z-order among TYPE_APPLICATION_OVERLAY windows is add-order, so the
+     * full-screen block wall -- added later -- buried the panic button and made it
+     * unreachable during a lockout, which is exactly when it matters most.
+     */
+    private val ALWAYS_ON_TOP = setOf("KillSwitchOverlay")
+
     const val MATCH_PARENT = -1
     const val WRAP_CONTENT = -2
 
@@ -70,8 +82,11 @@ object OverlayManager {
                     name,
                     props ?: Bundle(),
                 )
-                windowManager(app).addView(rootView, layoutParams(app, config))
+                val lp = layoutParams(app, config)
+                windowManager(app).addView(rootView, lp)
                 views[name] = rootView
+                params[name] = lp
+                if (name !in ALWAYS_ON_TOP) raiseAlwaysOnTop(app)
             } catch (t: Throwable) {
                 Log.e(TAG, "failed to show overlay $name", t)
             }
@@ -84,7 +99,9 @@ object OverlayManager {
         main.post {
             val view = views[name] ?: return@post
             try {
-                windowManager(app).updateViewLayout(view, layoutParams(app, config))
+                val lp = layoutParams(app, config)
+                params[name] = lp
+                windowManager(app).updateViewLayout(view, lp)
             } catch (t: Throwable) {
                 Log.e(TAG, "failed to relayout overlay $name", t)
             }
@@ -99,6 +116,7 @@ object OverlayManager {
         val app = context.applicationContext
         main.post {
             val view = views.remove(name) ?: return@post
+            params.remove(name)
             try {
                 windowManager(app).removeView(view)
                 view.unmountReactApplication()
@@ -110,6 +128,24 @@ object OverlayManager {
 
     fun hideAll(context: Context) {
         views.keys.toList().forEach { hide(context, it) }
+    }
+
+    /**
+     * Detach and re-attach the always-on-top windows so they sit above whatever
+     * was just added. The ReactRootView is NOT unmounted, so React state and any
+     * running animation survive the move.
+     */
+    private fun raiseAlwaysOnTop(context: Context) {
+        ALWAYS_ON_TOP.forEach { name ->
+            val view = views[name] ?: return@forEach
+            val lp = params[name] ?: return@forEach
+            try {
+                windowManager(context).removeViewImmediate(view)
+                windowManager(context).addView(view, lp)
+            } catch (t: Throwable) {
+                Log.e(TAG, "failed to raise $name", t)
+            }
+        }
     }
 
     // --- internals -------------------------------------------------------

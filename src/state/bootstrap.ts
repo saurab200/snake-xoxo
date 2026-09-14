@@ -1,5 +1,6 @@
 import {AppState} from 'react-native';
 import {Focus, Overlay, Permissions} from '../native';
+import {KILL_LAYOUT} from '../overlays/KillSwitchOverlay';
 import {
   SNAKE_LAYOUT,
   SNAKE_LAYOUT_ACTIVE,
@@ -30,6 +31,9 @@ async function showSnake() {
       'SnakeOverlay',
       isActive ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT,
     );
+    // The panic button travels with the snake -- it has to be reachable in
+    // exactly the situations where the snake is visible.
+    await Overlay.show('KillSwitchOverlay', KILL_LAYOUT);
   } catch {
     /* native not ready yet; the AppState hook below retries */
   }
@@ -54,6 +58,7 @@ export function startSnake(): void {
   const apply = (state: string) => {
     if (state === 'active') {
       Overlay.hide('SnakeOverlay').catch(() => {});
+      Overlay.hide('KillSwitchOverlay').catch(() => {});
     } else {
       showSnake();
     }
@@ -65,4 +70,13 @@ export function startSnake(): void {
 
 export function hideSnake(): Promise<boolean> {
   return Overlay.hide('SnakeOverlay');
+}
+
+/**
+ * After the kill switch stops everything, startSnake's AppState listener is
+ * still installed but `started` stays true, so nothing re-shows the overlays
+ * until the user next leaves the app. This lets the app re-arm explicitly.
+ */
+export function rearm(): void {
+  showSnake();
 }

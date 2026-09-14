@@ -11,6 +11,7 @@ import App from './App';
 import {name as appName} from './app.json';
 
 import BlockOverlay from './src/overlays/BlockOverlay';
+import KillSwitchOverlay from './src/overlays/KillSwitchOverlay';
 import ReminderOverlay from './src/overlays/ReminderOverlay';
 import SnakeOverlay from './src/overlays/SnakeOverlay';
 import WidgetOverlay from './src/overlays/WidgetOverlay';
@@ -23,6 +24,7 @@ AppRegistry.registerComponent('SnakeOverlay', () => SnakeOverlay);
 AppRegistry.registerComponent('BlockOverlay', () => BlockOverlay);
 AppRegistry.registerComponent('WidgetOverlay', () => WidgetOverlay);
 AppRegistry.registerComponent('ReminderOverlay', () => ReminderOverlay);
+AppRegistry.registerComponent('KillSwitchOverlay', () => KillSwitchOverlay);
 
 /**
  * Started at module scope, NOT from a React component.
