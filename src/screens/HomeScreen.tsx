@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   AppState,
   DeviceEventEmitter,
@@ -11,14 +11,17 @@ import {
 import {
   Blocking,
   Focus,
+  FocusState,
   Overlay,
   PermissionStatus,
   Permissions,
   RemindersApi,
 } from '../native';
+import RewardBadge from '../components/RewardBadge';
 import {PEEK_NOW_EVENT} from '../overlays/SnakeOverlay';
 import {WIDGET_LAYOUT} from '../overlays/WidgetOverlay';
 import {rearm, setSnakePeeking, startSnake} from '../state/bootstrap';
+import {useGamification} from '../state/gamificationStore';
 import {Storage} from '../state/storage';
 import {formatRemaining, useFocusSession} from '../state/useFocusSession';
 
@@ -30,7 +33,10 @@ const EMPTY_PERMS: PermissionStatus = {
 
 export default function HomeScreen() {
   const session = useFocusSession();
+  const game = useGamification();
   const [perms, setPerms] = useState<PermissionStatus>(EMPTY_PERMS);
+  /** Dev only: lets the duplicate-event test re-send the identical payload. */
+  const lastSimulated = useRef<FocusState | null>(null);
 
 
   const refreshPerms = useCallback(async () => {
@@ -54,6 +60,30 @@ export default function HomeScreen() {
   return (
     <ScrollView contentContainerStyle={styles.root}>
       <Text style={styles.h1}>Tether</Text>
+
+      <Section title="Your rewards">
+        <View style={styles.pointsRow}>
+          <Text style={styles.pointsValue}>{game.totalPoints}</Text>
+          <Text style={styles.pointsUnit}>pts</Text>
+        </View>
+        <Text style={styles.hint}>
+          Finish a focus session to earn 1 point per minute, then unlock and
+          equip new snake skins.
+        </Text>
+        <View style={styles.skinRow}>
+          {game.skins.map(skin => (
+            <RewardBadge
+              key={skin.id}
+              name={skin.name}
+              color={skin.color}
+              requiredPoints={skin.requiredPoints}
+              unlocked={game.isSkinUnlocked(skin.id)}
+              active={game.activeSkin === skin.id}
+              onSelect={() => game.setActiveSkin(skin.id)}
+            />
+          ))}
+        </View>
+      </Section>
 
       <Section title="1 · Permissions">
         <PermRow
@@ -192,6 +222,36 @@ export default function HomeScreen() {
           muted
         />
         <Button
+          label="Award 30 min session (+30 pts)"
+          onPress={() => {
+            // Exactly the shape the native layer sends, plus the completion flag.
+            const event = {
+              isActive: false,
+              durationMinutes: 30,
+              endAtMs: Date.now(),
+              remainingMs: 0,
+              remainingMinutes: 0,
+              completedSuccessfully: true,
+            };
+            lastSimulated.current = event;
+            DeviceEventEmitter.emit('tether:session', event);
+          }}
+          muted
+        />
+        <Button
+          label="Re-emit that session (should add 0)"
+          onPress={() => {
+            if (lastSimulated.current) {
+              DeviceEventEmitter.emit('tether:session', lastSimulated.current);
+            }
+          }}
+          muted
+        />
+        <Text style={styles.hint}>
+          Dedup check: the second button re-sends the identical completion event
+          and the point total must not move.
+        </Text>
+        <Button
           label="Send snake to the bezel"
           onPress={() => {
             // The overlay is unmounted right now (Tether is foreground), so
@@ -271,6 +331,10 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   row: {flexDirection: 'row', gap: 8},
+  pointsRow: {flexDirection: 'row', alignItems: 'baseline', gap: 6},
+  pointsValue: {color: '#fff', fontSize: 34, fontWeight: '800'},
+  pointsUnit: {color: '#8b949e', fontSize: 14, fontWeight: '700'},
+  skinRow: {flexDirection: 'row', gap: 8, marginTop: 12},
   status: {color: '#e6edf3', fontSize: 16, marginBottom: 10},
   hint: {color: '#8b949e', fontSize: 12, marginTop: 8},
   warn: {color: '#d29922', fontSize: 12, marginBottom: 8},
