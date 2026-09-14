@@ -28,6 +28,15 @@ class FocusModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(true)
     }
 
+    /**
+     * Whether the snake should be on screen at all. Cleared by the kill switch
+     * and honoured across reboots, so JS must ask before re-arming itself.
+     */
+    @ReactMethod
+    fun isArmed(promise: Promise) {
+        promise.resolve(Prefs.isArmed(reactContext))
+    }
+
     @ReactMethod
     fun disarm(promise: Promise) {
         // Stays off through a reboot -- see BootReceiver.

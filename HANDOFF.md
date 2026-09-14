@@ -32,7 +32,7 @@ Android only. React Native 0.75.4 + a Kotlin layer. 24 commits, 20 Kotlin files,
 | Task card | Working; only 1 of 3 tabs wired |
 | Integrations catalogue | Working; only Canvas is real |
 | Canvas API | **Never tested against a live instance** |
-| Kill switch (✕) | **Partly broken — see §5** |
+| Kill switch (✕) | Working, verified — including that it stays stopped |
 | Haptics | **Unverified** — emulator has no vibrator |
 
 Everything marked "verified" was checked by running it on an emulator and reading
@@ -122,26 +122,10 @@ If you add something that must survive the user leaving the app, put it there.
 
 ---
 
-## 5. Known broken — read before demoing
+## 5. Known limitations — read before demoing
 
-### The kill switch does not fully stop the service
-
-`stopEverything()` in `src/overlays/KillSwitchOverlay.tsx` calls
-`Overlay.hideAll()` **before** `Focus.disarm()`. `hideAll` unmounts the very
-overlay running that handler, so `disarm()` never lands. Observed: overlays
-vanish, the foreground service keeps running.
-
-*Fix:* call `disarm()` before `hideAll()`. The service's `onDestroy` hides
-overlays anyway.
-
-### "Stop everything" does not stay stopped
-
-The ✕ sets `armed = false` in Prefs, and `BootReceiver` honours it. But
-`startSnake()` in `src/state/bootstrap.ts` calls `Focus.arm()` unconditionally on
-every process start — and the accessibility service revives the process. So the
-app re-arms itself within seconds.
-
-*Fix:* `showSnake()` should check `Prefs.isArmed` via a new bridge method.
+Two kill-switch bugs that used to live here were fixed in `4a1f…`; the detail is
+in §10 because the reasoning is worth keeping.
 
 ### Vanish mode loses home-screen shortcuts
 
@@ -195,14 +179,13 @@ look broken regardless of the code. `scripts/emulator.sh` already does this.
 
 `docs/BACKLOG.md` has the deferred items with context. The short version:
 
-1. **Fix the two kill-switch bugs** (§5). Small, and it is a safety control.
-2. **Test Canvas against a real instance.** The client has never run against live
+1. **Test Canvas against a real instance.** The client has never run against live
    Canvas — only the error paths and the shape of the response have been
    reasoned about. This is the highest-value unknown in the codebase.
-3. **Tune the snake's feel on hardware.** `MINUTES_PER_DP`, the spring
+2. **Tune the snake's feel on hardware.** `MINUTES_PER_DP`, the spring
    `tension`/`friction`, `COIL_HOLD_MS`, `CRAWL_HOME_MS` — all picked blind.
    Haptics have never actually been felt.
-4. **Warn before enabling vanish mode**, given the shortcut loss above.
+3. **Warn before enabling vanish mode**, given the shortcut loss above.
 
 ### Per-slice agent briefs
 
@@ -258,3 +241,41 @@ Renaming touches `applicationId`, `namespace`, 20 Kotlin package declarations,
 the accessibility `SERVICE_ID`, the Device Owner component name, the emulator
 script and all four briefs — and invalidates the Device Owner provisioning. Cheap
 after the demo, expensive during it.
+
+---
+
+## 10. Two bugs worth learning from
+
+Both were in the kill switch — the one control that has to work when everything
+else has gone wrong. Both are fixed; the shape of them will recur.
+
+### Unmounting the component that is running your handler
+
+`stopEverything()` called `Overlay.hideAll()` and then `Focus.disarm()`.
+`hideAll` tears down every overlay including the kill switch itself, so the
+handler's own React root was unmounted mid-await and `disarm()` never ran. The
+symptom was subtle: the overlays vanished, so it *looked* like it worked, while
+the foreground service kept running.
+
+`disarm()` runs first now. It stops the service, whose `onDestroy` removes the
+overlays natively, so nothing depends on the component still existing.
+
+**The general shape:** if an async handler tears down its own UI, everything
+after that line is on borrowed time. Do the durable work first.
+
+### A flag nothing consulted
+
+The ✕ set `armed = false` in Prefs, and `BootReceiver` honoured it — but
+`startSnake()` called `Focus.arm()` unconditionally on every process start. The
+accessibility service revives the process constantly, so "stop everything" undid
+itself within seconds.
+
+`showSnake()` now checks `Focus.isArmed()` and returns early. `rearm()` arms
+explicitly, which is what the Focus tab's "Re-pin snake" calls.
+
+**The general shape:** a flag is only as good as the number of places that read
+it. This one had one writer and one reader, and the third path ignored it.
+
+Verified after the fix: the ✕ stopped the service, opening another app revived
+the process (the accessibility service does that), and Tether stayed down —
+no service, no overlays. "Re-pin snake" brought it back.

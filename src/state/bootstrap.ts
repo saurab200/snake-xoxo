@@ -20,7 +20,20 @@ async function showSnake() {
     if (!overlay) {
       return; // nothing we can do until the user grants it
     }
-    // The snake needs the process alive to stay on screen.
+
+    /**
+     * Respect an explicit close.
+     *
+     * This used to call arm() unconditionally on every process start. The
+     * accessibility service revives the process, so "stop everything" undid
+     * itself within seconds -- the kill switch cleared the flag and this put it
+     * straight back.
+     */
+    if (!(await Focus.isArmed())) {
+      return;
+    }
+
+    // The snake needs the process alive to stay on screen. Idempotent.
     await Focus.arm();
 
     const {isActive} = await Focus.getState();
@@ -71,10 +84,16 @@ export function hideSnake(): Promise<boolean> {
 }
 
 /**
- * After the kill switch stops everything, startSnake's AppState listener is
- * still installed but `started` stays true, so nothing re-shows the overlays
- * until the user next leaves the app. This lets the app re-arm explicitly.
+ * Bring the snake back after a kill switch.
+ *
+ * Must arm explicitly: showSnake() now refuses to run while disarmed, which is
+ * the whole point of the fix above.
  */
-export function rearm(): void {
+export async function rearm(): Promise<void> {
+  try {
+    await Focus.arm();
+  } catch {
+    /* native not ready */
+  }
   showSnake();
 }

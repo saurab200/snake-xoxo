@@ -65,9 +65,16 @@ export default function KillSwitchOverlay() {
   }
 
   /**
-   * Order matters: clear the state first so nothing can re-trigger, then take
-   * the windows down, then stop the service last -- stopping it tears down the
-   * JS context that is running this very handler.
+   * Order matters, and the obvious order was wrong.
+   *
+   * hideAll() used to run before disarm(). It unmounts every overlay INCLUDING
+   * this one -- the very component running this handler -- so disarm() never
+   * landed and the foreground service survived a "stop everything".
+   *
+   * disarm() goes first now. It stops the service, whose onDestroy takes the
+   * overlays down natively, so nothing depends on this component still being
+   * mounted. hideAll() stays as a fallback for the case where the service was
+   * not running to begin with.
    */
   async function stopEverything() {
     try {
@@ -77,10 +84,10 @@ export default function KillSwitchOverlay() {
       await RemindersApi.stopLockout();
     } catch {}
     try {
-      await Overlay.hideAll();
+      await Focus.disarm();
     } catch {}
     try {
-      await Focus.disarm();
+      await Overlay.hideAll();
     } catch {}
   }
 

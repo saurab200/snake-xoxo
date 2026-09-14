@@ -56,6 +56,9 @@ export const Focus = {
   arm: (): Promise<boolean> => TetherFocus.arm(),
   disarm: (): Promise<boolean> => TetherFocus.disarm(),
 
+  /** False after the kill switch, until the user explicitly brings it back. */
+  isArmed: (): Promise<boolean> => TetherFocus.isArmed(),
+
   startSession: (minutes: number, blocklist: string[]): Promise<FocusState> =>
     TetherFocus.startSession(minutes, blocklist),
 
