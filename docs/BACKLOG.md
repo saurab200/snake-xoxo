@@ -45,3 +45,19 @@ explicitly removed:
 
 Worth putting behind a visible control before anyone provisions a phone they
 actually care about.
+
+## Vanish mode loses home-screen shortcuts
+
+Observed on the emulator: after a blocked app is hidden and later restored, it
+comes back in the app drawer but its HOME SCREEN shortcut is gone.
+
+Hiding a package makes the launcher drop it from the saved home-screen layout;
+unhiding re-registers the app but nothing puts the shortcut back where the user
+had it. So blocking Instagram a few times quietly rearranges someone's home
+screen.
+
+Not a bug in Tether -- it is how launchers react to a package disappearing --
+but it makes vanish mode mildly destructive to a layout the user chose. Worth
+warning about in the UI before anyone enables it on a phone they care about, or
+worth reconsidering against the launcher approach (option 2 in the original
+blocking decision), where Tether owns the grid and can dim in place instead.
