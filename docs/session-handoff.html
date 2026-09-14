@@ -1,0 +1,283 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Tether — Session Handoff</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.2pt; line-height: 1.5; color: #1a1a1a; margin: 0;
+  }
+  h1 { font-size: 21pt; margin: 0 0 2pt; letter-spacing: -0.4pt; }
+  .sub { color: #666; font-size: 9.5pt; margin-bottom: 14pt; }
+  h2 {
+    font-size: 12.5pt; margin: 20pt 0 7pt; padding-bottom: 4pt;
+    border-bottom: 1.5px solid #16a34a; letter-spacing: -0.2pt;
+  }
+  h3 { font-size: 10.6pt; margin: 13pt 0 4pt; }
+  p { margin: 0 0 7pt; }
+  ul, ol { margin: 0 0 8pt; padding-left: 17pt; }
+  li { margin-bottom: 3.5pt; }
+  code {
+    font-family: "SF Mono", Menlo, monospace; font-size: 8.8pt;
+    background: #f1f3f5; padding: 1px 4px; border-radius: 3px;
+  }
+  pre {
+    font-family: "SF Mono", Menlo, monospace; font-size: 8.5pt;
+    background: #f7f8fa; border: 1px solid #e3e6ea; border-left: 3px solid #16a34a;
+    border-radius: 4px; padding: 8pt 10pt; margin: 6pt 0 9pt;
+    white-space: pre-wrap; line-height: 1.42;
+  }
+  pre code { background: none; padding: 0; font-size: 8.5pt; }
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt; font-size: 9.3pt; }
+  th, td { text-align: left; padding: 4.5pt 7pt; border-bottom: 1px solid #e3e6ea; vertical-align: top; }
+  th { background: #f7f8fa; font-weight: 600; }
+  .warn {
+    background: #fff8e6; border: 1px solid #f0c36d; border-radius: 4px;
+    padding: 8pt 11pt; margin: 9pt 0;
+  }
+  .warn strong { color: #8a5a00; }
+  .ok { background: #eefbf2; border: 1px solid #9ad9b0; border-radius: 4px; padding: 8pt 11pt; margin: 9pt 0; }
+  .muted { color: #666; }
+  .pill {
+    display: inline-block; background: #16a34a; color: #fff; font-size: 8pt;
+    font-weight: 700; padding: 1.5px 6px; border-radius: 9px; vertical-align: 1px;
+  }
+  .no { color: #b4232a; font-weight: 600; }
+  .yes { color: #157a3a; font-weight: 600; }
+  .brk { page-break-before: always; }
+  .foot { margin-top: 18pt; padding-top: 7pt; border-top: 1px solid #e3e6ea; color: #888; font-size: 8.6pt; }
+</style>
+</head>
+<body>
+
+<h1>Tether — Session Handoff</h1>
+<div class="sub">
+  Resuming on a different machine &nbsp;·&nbsp; repo at <code>c49d141</code> &nbsp;·&nbsp; 26 commits
+</div>
+
+<div class="ok">
+  <strong>All work is pushed.</strong> Local and
+  <code>github.com/saurab200/snake-xoxo</code> are identical at <code>c49d141</code>,
+  working tree clean. Nothing is stranded on the old machine except the
+  environment described in §2.
+</div>
+
+<h2>1 · Where we left off</h2>
+
+<p>
+  Tether is an Android focus app. A green snake lives in the top bezel; pull its
+  tail down and how far you pull sets the session length. During a session the
+  apps you blocked <strong>disappear from the launcher entirely</strong>, and a
+  task card shows what to work on instead.
+</p>
+
+<p>The last things done, newest first:</p>
+
+<table>
+  <tr><th style="width:74pt">Commit</th><th>What</th></tr>
+  <tr><td><code>c49d141</code></td><td>Corrected stale hashes in the handoff doc</td></tr>
+  <tr><td><code>0c439a4</code></td><td><strong>Fixed both kill-switch bugs</strong> — it now stops the service, and stays stopped</td></tr>
+  <tr><td><code>994d651</code></td><td>Wrote <code>HANDOFF.md</code> (the in-repo code handoff)</td></tr>
+  <tr><td><code>0afb9c4</code></td><td>Task card on session start + “Add an app” catalogue</td></tr>
+  <tr><td><code>a5f7e52</code></td><td>Snake lives in the bezel, crawls home after a pull</td></tr>
+</table>
+
+<p>
+  There is also a tag, <code>demo-v1</code>, marking a known-good demo build if
+  you ever need to fall back.
+</p>
+
+<h2>2 · What does <span class="no">not</span> transfer</h2>
+
+<p>
+  The code travels. The environment does not. On a new machine none of the
+  following exists, and three of them are easy to forget:
+</p>
+
+<table>
+  <tr><th style="width:150pt">Thing</th><th>Why it matters</th></tr>
+  <tr>
+    <td><strong>The emulator AVD</strong></td>
+    <td>Create one in Android Studio → Device Manager. Any Pixel, <strong>API 34/35, Google APIs</strong> (needs YouTube + Chrome preinstalled for the demo).</td>
+  </tr>
+  <tr>
+    <td><strong>Device Owner</strong></td>
+    <td>Per-device provisioning. Without it, blocked apps are covered by a wall instead of vanishing. Command in §3.</td>
+  </tr>
+  <tr>
+    <td><strong>Accessibility grant</strong></td>
+    <td>Resets on <em>every</em> reinstall. The number-one cause of “blocking just stopped working”.</td>
+  </tr>
+  <tr>
+    <td><strong>The built APK</strong></td>
+    <td><code>~/Desktop/tether.apk</code> on the old machine only. Rebuild, or copy it across.</td>
+  </tr>
+  <tr>
+    <td><strong>Canvas credentials</strong></td>
+    <td>Never set on either machine. The Canvas client has never run against a live instance — see §5.</td>
+  </tr>
+</table>
+
+<div class="warn">
+  <strong>Clone into a path with no spaces.</strong> The old checkout was
+  <code>/Users/hunter/snake xoxo</code>, and Gradle is unreliable with spaces in
+  the path. Use <code>~/code/tether</code>. This cost real time already.
+</div>
+
+<h2>3 · Getting running on the new machine</h2>
+
+<p>Needs Node 18+, JDK 17+, Android Studio, and an AVD as described above.</p>
+
+<pre><code>git clone git@github.com:saurab200/snake-xoxo.git ~/code/tether
+cd ~/code/tether
+npm install
+npm run setup                 # writes android/local.properties for this machine
+
+./scripts/emulator.sh boot    # starts the AVD with -gpu host
+./scripts/emulator.sh install # builds, installs, grants all three permissions</code></pre>
+
+<p>Then, once only, to enable vanish mode:</p>
+
+<pre><code>adb shell dpm set-device-owner com.tether/com.tether.admin.TetherDeviceAdmin</code></pre>
+
+<p class="muted">
+  Only works on a device with no Google account signed in — fine on a fresh
+  emulator, needs a factory-reset phone otherwise. Skip it and everything else
+  still works; blocked apps get the wall instead of disappearing.
+</p>
+
+<h3>Check it worked</h3>
+<pre><code>adb shell settings get secure enabled_accessibility_services
+    # expect com.tether/com.tether.blocking.TetherAccessibilityService
+
+adb shell dpm list-owners
+    # expect com.tether/.admin.TetherDeviceAdmin, DeviceOwner</code></pre>
+
+<h2 class="brk">4 · Read these first, in this order</h2>
+
+<table>
+  <tr><th style="width:150pt">File</th><th>What it gives you</th></tr>
+  <tr><td><code>HANDOFF.md</code></td><td><strong>Start here.</strong> Status table, five decisions not to undo, architecture in execution order, setup gotchas, and §10 on two bugs whose shape will recur.</td></tr>
+  <tr><td><code>README.md</code></td><td>Setup, why there is Kotlin in a React Native project, per-slice file ownership.</td></tr>
+  <tr><td><code>docs/BACKLOG.md</code></td><td>Deferred items with enough context to pick up cold.</td></tr>
+  <tr><td><code>docs/PERSON-{A,B,C,D}-AGENT-BRIEF.md</code></td><td>Self-contained specs per slice, written to hand to an AI agent. A/B/C are implemented; D (gamification) is not started.</td></tr>
+</table>
+
+<h2>5 · The three things that are genuinely unverified</h2>
+
+<p>
+  Everything else in the status table was checked by running it and reading the
+  result. These were not, and no amount of further coding will settle them:
+</p>
+
+<ol>
+  <li>
+    <strong>Canvas has never hit a live instance.</strong> The client, its 8s
+    timeout and its error mapping were reasoned about, not exercised. This is the
+    highest-value unknown in the codebase. Get a token from
+    Canvas → Account → Settings → <em>+ New Access Token</em> and connect it on
+    the Apps tab.
+  </li>
+  <li>
+    <strong>Haptics have never been felt.</strong> The emulator has no vibrator.
+    The detent buzz while dragging and the session-end pattern are fired but
+    unproven.
+  </li>
+  <li>
+    <strong>The snake's feel is guesswork.</strong>
+    <code>MINUTES_PER_DP</code>, the spring <code>tension</code>/<code>friction</code>,
+    <code>COIL_HOLD_MS</code>, <code>CRAWL_HOME_MS</code> were all picked blind.
+    Judge them with a thumb, not on an emulator.
+  </li>
+</ol>
+
+<h2>6 · Known sharp edges</h2>
+
+<ul>
+  <li>
+    <strong>Vanish mode loses home-screen shortcuts.</strong> Hiding a package
+    makes the launcher drop it from the saved layout; unhiding returns the app to
+    the drawer but not to the home screen. Repeated blocking quietly rearranges
+    someone's home screen.
+  </li>
+  <li>
+    <strong>A Device Owner app cannot be force-stopped.</strong>
+    <code>am force-stop</code> silently does nothing. To release it:
+    <code>adb shell dpm remove-active-admin com.tether/com.tether.admin.TetherDeviceAdmin</code>
+  </li>
+  <li>
+    <strong>Two task-card tabs are inert</strong> by design. Canvas exposes
+    announcements and graded work, so both are one connector method away.
+  </li>
+  <li>
+    <strong>Reminders only fire while the service is alive</strong> — they run off
+    the 1-second ticker, deliberately, to avoid the restricted exact-alarm
+    permission.
+  </li>
+</ul>
+
+<h2>7 · Demo script</h2>
+
+<ol>
+  <li><strong>Home screen</strong> — the snake's tail hangs from the bezel, small and ignorable.</li>
+  <li><strong>Pull the tail down</strong> — it uncoils, the duration climbs with the pull. Release around 45 min.</li>
+  <li>It coils, holds, then <strong>crawls back into the bezel</strong>. A timer pill and a <code>+</code> appear beside it.</li>
+  <li><strong>The task card slides up</strong> — what you owe, grouped by due date.</li>
+  <li><strong>Open YouTube</strong> — the icon is <em>gone from the launcher</em>. Not blocked: absent.</li>
+  <li><strong>Tap the ✕ twice</strong> — everything stops, and stays stopped.</li>
+</ol>
+
+<div class="warn">
+  <strong>Record a backup video.</strong> Accessibility permissions are flaky
+  live, and a Device Owner app cannot be force-stopped if something goes sideways
+  on stage.
+</div>
+
+<h2>8 · Starting a new AI session</h2>
+
+<p>Paste this as the first message, after cloning:</p>
+
+<pre><code>I'm continuing work on Tether, an Android focus app in React Native 0.75.4
+plus a Kotlin layer. The repo is cloned here and is at commit c49d141.
+
+Read HANDOFF.md first — it covers what works, what is unverified, and five
+decisions not to undo (the most important: newArchEnabled must stay false,
+or all six overlays silently render nothing).
+
+Environment notes: the emulator AVD, Device Owner provisioning and the
+accessibility grant are per-machine and do not come from the repo. See §3 of
+the session handoff, or scripts/emulator.sh.
+
+Next up, in priority order:
+  1. Test the Canvas connector against a real instance — it has never run
+     against live Canvas.
+  2. Tune the snake's feel on hardware (MINUTES_PER_DP, spring tension and
+     friction, COIL_HOLD_MS, CRAWL_HOME_MS). Haptics have never been felt.
+  3. Warn the user before enabling vanish mode, since it loses home-screen
+     shortcuts.</code></pre>
+
+<h2>9 · Naming</h2>
+
+<p>
+  “Tether” came from the original spec doc, not a deliberate choice, and it
+  collides with Android's own <em>tethering</em> — two system packages and an
+  APEX module use the word, so <code>adb logcat | grep -i tether</code> returns
+  system noise. Use <code>grep "com.tether"</code>.
+</p>
+<p>
+  Renaming touches <code>applicationId</code>, <code>namespace</code>, 20 Kotlin
+  package declarations, the accessibility service ID, the Device Owner component
+  name, the emulator script and all four briefs — and invalidates the Device
+  Owner provisioning. Cheap after the demo, expensive during it.
+</p>
+
+<div class="foot">
+  github.com/saurab200/snake-xoxo &nbsp;·&nbsp; <code>c49d141</code> &nbsp;·&nbsp;
+  tag <code>demo-v1</code> marks a known-good demo build
+</div>
+
+</body>
+</html>

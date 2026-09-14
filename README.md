@@ -9,7 +9,11 @@ the corner.
 ---
 
 > **Picking this up cold?** Read [HANDOFF.md](HANDOFF.md) first — what works,
-> what is quietly broken, and which decisions not to undo.
+> what is unverified, and which decisions not to undo.
+>
+> **Moving to a different machine?** [SESSION-HANDOFF.md](SESSION-HANDOFF.md)
+> covers what the repo cannot carry: the emulator, Device Owner provisioning and
+> the accessibility grant are all per-machine.
 
 ## Read this first: why there is Kotlin in a React Native project
 
