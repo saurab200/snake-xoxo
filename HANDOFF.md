@@ -1,6 +1,6 @@
 # Tether — Handoff
 
-State of the project as of `0c439a4`. Written for whoever picks this up next.
+State of the project as of `8b2e689` on **`feature/taskui`**. Written for whoever picks this up next.
 
 Read [README.md](README.md) for setup. This file is what the README cannot tell
 you: what actually works, where the sharp edges are, and which decisions you
@@ -15,8 +15,11 @@ down; how far you pull sets the session length. During a session the apps you
 have blocked **disappear from the launcher entirely**, and a task card shows what
 you should be doing instead.
 
-Android only. React Native 0.75.4 + a Kotlin layer. 26 commits, 20 Kotlin files,
-6 native modules, 6 overlays.
+Android only. React Native 0.75.4 + a Kotlin layer. 20 Kotlin files, 6 native
+modules, 6 overlays.
+
+**Work on `feature/taskui`** — it is the only branch with all four slices.
+`main` does not have the gamification merge. See SESSION-HANDOFF.md §3.
 
 ---
 
@@ -33,6 +36,7 @@ Android only. React Native 0.75.4 + a Kotlin layer. 26 commits, 20 Kotlin files,
 | Integrations catalogue | Working; only Canvas is real |
 | Canvas API | **Never tested against a live instance** |
 | Kill switch (✕) | Working, verified — including that it stays stopped |
+| Gamification: points, skins, leaderboard | Working, verified after the merge |
 | Haptics | **Unverified** — emulator has no vibrator |
 
 Everything marked "verified" was checked by running it on an emulator and reading

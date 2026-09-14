@@ -1,176 +1,236 @@
 # Tether — Session Handoff
 
-For picking this up on a **different machine**. State as of `c49d141`, 26 commits.
+Everything built so far, and how to pick it back up.
 
-[HANDOFF.md](HANDOFF.md) covers the code. This file covers everything that does
-*not* live in the repo — the environment, and how to get back to a working setup.
+Current state: branch **`feature/taskui`** at `8b2e689`, clean and pushed.
 
-> All work is pushed. Local and `github.com/saurab200/snake-xoxo` are identical
-> at `c49d141`, working tree clean.
-
----
-
-## 1. Where we left off
-
-Tether is an Android focus app. A green snake lives in the top bezel; pull its
-tail down and how far you pull sets the session length. During a session the
-apps you blocked **disappear from the launcher entirely**, and a task card shows
-what to work on instead.
-
-| Commit | What |
-|---|---|
-| `c49d141` | Corrected stale hashes in the handoff doc |
-| `0c439a4` | **Fixed both kill-switch bugs** — it now stops the service, and stays stopped |
-| `994d651` | Wrote `HANDOFF.md` |
-| `0afb9c4` | Task card on session start + "Add an app" catalogue |
-| `a5f7e52` | Snake lives in the bezel, crawls home after a pull |
-
-Tag `demo-v1` marks a known-good demo build to fall back to.
+- [HANDOFF.md](HANDOFF.md) — the code: architecture, decisions not to undo, known edges
+- [README.md](README.md) — setup and per-slice file ownership
+- **This file** — what was built, branch topology, and how to resume
 
 ---
 
-## 2. What does NOT transfer
+## 1. What Tether is
 
-The code travels. The environment does not.
+An Android focus app. A green snake lives in the top bezel. Pull its tail down —
+how far you pull sets the session length. During a session the apps you blocked
+**disappear from the launcher entirely**, a task card shows what to work on, and
+finishing a session earns points that unlock snake skins.
 
-| Thing | Why it matters |
-|---|---|
-| **The emulator AVD** | Create one in Android Studio → Device Manager. Any Pixel, **API 34/35, Google APIs** — it needs YouTube and Chrome preinstalled for the demo. |
-| **Device Owner** | Per-device provisioning. Without it, blocked apps are covered by a wall instead of vanishing. |
-| **Accessibility grant** | Resets on *every* reinstall. The number-one cause of "blocking just stopped working". |
-| **The built APK** | `~/Desktop/tether.apk` existed only on the old machine. Rebuild or copy it. |
-| **Canvas credentials** | Never set on either machine — see §5. |
-
-**Clone into a path with no spaces.** The old checkout was
-`/Users/hunter/snake xoxo`, and Gradle is unreliable with spaces in the path.
-Use `~/code/tether`. This already cost real time once.
+React Native 0.75.4 + a Kotlin layer. Android only.
 
 ---
 
-## 3. Getting running
+## 2. What was built
 
-Needs Node 18+, JDK 17+, Android Studio, and an AVD as above.
+### The snake (Person 1 / A)
 
-```bash
-git clone git@github.com:saurab200/snake-xoxo.git ~/code/tether
-cd ~/code/tether
-npm install
-npm run setup                  # writes android/local.properties for this machine
+- Lives in the bezel; only the tail tip shows at rest.
+- One `Animated.Value` drives three stops: **bezel → coiled → extended**, so how
+  far it emerges is exactly how far you pull.
+- A committed pull settles into a coil, holds, then crawls home over ~2.4s. A
+  short pull just retracts.
+- Duration snaps to 5-minute steps with haptic detents. 60fps, flat 16ms frames.
+- Timer runs in a Kotlin foreground service, so it survives the JS thread idling.
+- Survives reboot and force-stop; the session deadline is preserved exactly.
 
-./scripts/emulator.sh boot     # starts the AVD with -gpu host
-./scripts/emulator.sh install  # builds, installs, grants all three permissions
+### Blocking (Person 2 / B)
+
+- Accessibility service detects the foreground app and checks the blocklist in
+  Kotlin — no JS bridge hop.
+- Block wall with a live countdown, or **vanish mode**: with Device Owner the
+  blocked app's icon disappears from the launcher entirely. No icon, no dialog,
+  nothing to tap.
+- Searchable blocklist, selected-first, persisted natively so it survives a cold
+  start.
+- Warns when Android silently disables the accessibility service.
+
+### Integrations and tasks (Person 3 / C)
+
+- **Apps tab** with a "+ Add an app" catalogue. Canvas connects for real; Google
+  Classroom, Notion and Todoist are listed as unavailable on purpose.
+- **Task card** slides up when a session starts, built to the supplied design:
+  segmented tab bar, collapsible `DUE IN N DAYS` headings, rows with course,
+  title, `Due 09/16 at 5:37pm` and points.
+- Canvas assignments and your own reminders land in one list.
+- **Reminders**: add a task with a due date and lock duration; when it falls due
+  Tether goes into a **total lockout** — blocked apps close on sight, no exit.
+
+### Gamification (Person 4 / D — Ali)
+
+- 1 point per minute of a completed session; cancelled sessions earn nothing.
+- Points unlock snake skins: Green 0 / Blue 30 / Gold 120. The active skin
+  re-tints the whole snake and its pills.
+- **Rank** tab with a leaderboard.
+- Sessions are credited once, keyed on a persisted fingerprint, so repeated
+  events and app restarts cannot double-award.
+
+### Cross-cutting
+
+- **Kill switch** — a ✕ in the top-right. Two taps stops the session, any
+  lockout, every overlay and the service, from anywhere. It stays stopped until
+  "Re-pin snake".
+
+---
+
+## 3. Branch topology
+
+```
+main                          d8c3bff   snake + blocking + tasks (no gamification)
+feature/gamification-rewards  ad98e4e   Ali's work, untouched
+develop                       f5b8051   gamification merged in
+feature/taskui                8b2e689   ← EVERYTHING. Work here.
 ```
 
-Once only, to enable vanish mode:
+`feature/taskui` is the only branch with all four slices. `main` does **not**
+have gamification yet.
+
+The merge was smaller than expected: Ali's SnakeOverlay change was colour-only
+and built on top of the arc-length spiral, so only two files conflicted. Details
+are in the merge commit.
+
+---
+
+## 4. Verified vs assumed
+
+Everything below marked verified was checked by running it on an emulator and
+reading the result.
+
+| Area | State |
+|---|---|
+| Snake: bezel, pull, coil, crawl home | Verified |
+| Timer, reboot and force-stop survival | Verified |
+| Blocking + vanish mode | Verified |
+| Reminders → lockout | Verified |
+| Task card + due-date grouping | Verified |
+| Integrations catalogue | Verified |
+| Points, dedup, skins tinting the snake | Verified after the merge |
+| Kill switch, including staying stopped | Verified |
+| **Canvas against a live instance** | **Never tested** |
+| **Haptics** | **Never felt** — emulator has no vibrator |
+| **Leaderboard network path** | Falls back to mock data silently by design |
+
+---
+
+## 5. Resuming on THIS machine
+
+The environment is already provisioned here — emulator, Device Owner,
+accessibility grant. Usually all you need is:
 
 ```bash
+cd "/Users/hunter/snake xoxo"
+git checkout feature/taskui
+```
+
+If the snake is not on screen, the kill switch left it disarmed: open Tether →
+Focus tab → **Re-pin snake**.
+
+### Resuming on a DIFFERENT machine
+
+The code travels; the environment does not. The emulator AVD, Device Owner
+provisioning and the accessibility grant are all per-machine, and two of the
+three reset on every reinstall.
+
+```bash
+git clone git@github.com:saurab200/snake-xoxo.git ~/code/tether   # no spaces in the path
+cd ~/code/tether
+git checkout feature/taskui
+npm install
+npm run setup                  # writes android/local.properties
+
+./scripts/emulator.sh boot     # AVD: any Pixel, API 34/35, Google APIs
+./scripts/emulator.sh install  # builds, installs, grants permissions
+
 adb shell dpm set-device-owner com.tether/com.tether.admin.TetherDeviceAdmin
 ```
 
-Only works on a device with no Google account signed in — fine on a fresh
-emulator, needs a factory-reset phone otherwise. Skip it and everything still
-works; blocked apps get the wall instead of disappearing.
+That last one enables vanish mode and only works with no Google account signed
+in. Skip it and everything else still works; blocked apps get the wall instead
+of disappearing.
 
-### Check it worked
+---
 
-```bash
-adb shell settings get secure enabled_accessibility_services
-    # expect com.tether/com.tether.blocking.TetherAccessibilityService
+## 6. Gotchas that each cost an hour once
 
-adb shell dpm list-owners
-    # expect com.tether/.admin.TetherDeviceAdmin, DeviceOwner
+- **Android disables the accessibility service on every reinstall.** Top cause of
+  "blocking just stopped working". The Blocked tab shows a red banner.
+- **Enabling it over adb only sticks if the app is running.** Start the app
+  first, then grant. `./scripts/emulator.sh grant` does it in the right order.
+- **`adb uninstall` wipes SharedPreferences** — the blocklist resets.
+  `adb install -r` preserves it.
+- **Kotlin changes need `npm run android`.** Metro reload will not pick them up.
+- **A Device Owner app cannot be force-stopped.** `am force-stop` silently does
+  nothing.
+- **Boot the emulator with `-gpu host`.** Software rendering costs ~23ms a frame
+  and makes every animation look broken. `scripts/emulator.sh` already does this.
+- **Never set `newArchEnabled=true`.** All six overlays would silently render
+  nothing.
+
+---
+
+## 7. What is next
+
+1. **Test Canvas against a real instance.** The client has never run against
+   live Canvas — only its error paths were reasoned about. Highest-value unknown
+   in the codebase. Token: Canvas → Account → Settings → *+ New Access Token*.
+2. **Tune the snake on hardware.** `MINUTES_PER_DP`, spring `tension`/`friction`,
+   `COIL_HOLD_MS`, `CRAWL_HOME_MS` were all picked blind. Haptics unfelt.
+3. **Decide whether `feature/taskui` merges into `main` or `develop`.**
+4. **Ask Ali** whether the bezel tail should use his `palette.accent` — his
+   peek-nub tinting was dropped with the nub it belonged to.
+5. **Warn before enabling vanish mode** — it loses home-screen shortcuts.
+
+---
+
+## 8. Starting a new AI session
+
+Paste this as the first message:
+
+```
+Continuing Tether, an Android focus app (React Native 0.75.4 + Kotlin).
+Repo: /Users/hunter/snake xoxo — branch feature/taskui at 8b2e689, clean
+and pushed. That branch has all four slices including the gamification
+merge; main does not.
+
+Read HANDOFF.md first: architecture, five decisions not to undo (most
+important: newArchEnabled must stay false or all six overlays silently
+render nothing), and known edges.
+
+Environment is already set up on this machine — emulator, Device Owner,
+accessibility grant. If the snake is not on screen, the kill switch left
+it disarmed: Focus tab → Re-pin snake.
+
+Next up:
+  1. Test the Canvas connector against a real instance — it has never run
+     against live Canvas.
+  2. Tune the snake's feel on hardware. Haptics have never been felt.
+  3. Decide whether feature/taskui merges into main or develop.
 ```
 
 ---
 
-## 4. Read these, in this order
+## 9. Demo script
 
-| File | What it gives you |
-|---|---|
-| `HANDOFF.md` | **Start here.** Status table, five decisions not to undo, architecture in execution order, setup gotchas, and §10 on two bugs whose shape will recur. |
-| `README.md` | Setup, why there is Kotlin in a React Native project, per-slice file ownership. |
-| `docs/BACKLOG.md` | Deferred items with enough context to pick up cold. |
-| `docs/PERSON-{A,B,C,D}-AGENT-BRIEF.md` | Self-contained specs per slice, written to hand to an AI agent. A/B/C implemented; D (gamification) not started. |
-
----
-
-## 5. The three genuinely unverified things
-
-Everything else in the status table was checked by running it and reading the
-result. These were not, and more coding will not settle them:
-
-1. **Canvas has never hit a live instance.** The client, its 8s timeout and its
-   error mapping were reasoned about, not exercised. Highest-value unknown in
-   the codebase. Get a token from Canvas → Account → Settings → *+ New Access
-   Token* and connect it on the Apps tab.
-2. **Haptics have never been felt.** The emulator has no vibrator.
-3. **The snake's feel is guesswork.** `MINUTES_PER_DP`, the spring
-   `tension`/`friction`, `COIL_HOLD_MS`, `CRAWL_HOME_MS` were picked blind.
-   Judge them with a thumb.
-
----
-
-## 6. Known sharp edges
-
-- **Vanish mode loses home-screen shortcuts.** Hiding a package makes the
-  launcher drop it from the saved layout; unhiding returns the app to the drawer
-  but not to the home screen.
-- **A Device Owner app cannot be force-stopped.** `am force-stop` silently does
-  nothing. Release it with
-  `adb shell dpm remove-active-admin com.tether/com.tether.admin.TetherDeviceAdmin`
-- **Two task-card tabs are inert** by design.
-- **Reminders only fire while the service is alive** — they run off the 1-second
-  ticker, deliberately, to avoid the restricted exact-alarm permission.
-
----
-
-## 7. Demo script
-
-1. **Home screen** — the snake's tail hangs from the bezel, small and ignorable.
-2. **Pull the tail down** — it uncoils, the duration climbs. Release around 45 min.
-3. It coils, holds, then **crawls back into the bezel**. A timer pill and a `+`
+1. **Home screen** — the tail hangs from the bezel, small and ignorable.
+2. **Pull the tail down** — it uncoils, duration climbs. Release around 45 min.
+3. It coils, holds, then **crawls back into the bezel**. Timer and `+` pills
    appear beside it.
 4. **The task card slides up** — what you owe, grouped by due date.
 5. **Open YouTube** — the icon is *gone from the launcher*. Not blocked: absent.
-6. **Tap the ✕ twice** — everything stops, and stays stopped.
+6. **Finish a session** → points land, and a skin can be equipped to recolour the
+   snake.
+7. **Tap the ✕ twice** — everything stops, and stays stopped.
 
 Record a backup video. Accessibility permissions are flaky live, and a Device
 Owner app cannot be force-stopped if something goes sideways on stage.
 
 ---
 
-## 8. Starting a new AI session
+## 10. Naming
 
-Paste this as the first message, after cloning:
-
-```
-I'm continuing work on Tether, an Android focus app in React Native 0.75.4
-plus a Kotlin layer. The repo is cloned here and is at commit c49d141.
-
-Read HANDOFF.md first — it covers what works, what is unverified, and five
-decisions not to undo (the most important: newArchEnabled must stay false,
-or all six overlays silently render nothing).
-
-Environment notes: the emulator AVD, Device Owner provisioning and the
-accessibility grant are per-machine and do not come from the repo. See
-SESSION-HANDOFF.md §3, or scripts/emulator.sh.
-
-Next up, in priority order:
-  1. Test the Canvas connector against a real instance — it has never run
-     against live Canvas.
-  2. Tune the snake's feel on hardware (MINUTES_PER_DP, spring tension and
-     friction, COIL_HOLD_MS, CRAWL_HOME_MS). Haptics have never been felt.
-  3. Warn the user before enabling vanish mode, since it loses home-screen
-     shortcuts.
-```
-
----
-
-## 9. Naming
-
-"Tether" came from the original spec doc, not a deliberate choice, and it
-collides with Android's own *tethering* — two system packages and an APEX module
-use the word, so `adb logcat | grep -i tether` returns system noise. Use
+"Tether" came from the original spec doc, not a deliberate choice, and collides
+with Android's own *tethering* — two system packages and an APEX module use the
+word, so `adb logcat | grep -i tether` returns system noise. Use
 `grep "com.tether"`.
 
 Renaming touches `applicationId`, `namespace`, 20 Kotlin package declarations,
