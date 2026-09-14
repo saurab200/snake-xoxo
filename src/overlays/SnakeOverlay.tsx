@@ -1,7 +1,7 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Animated,
-  DeviceEventEmitter,
+  Easing,
   PanResponder,
   StyleSheet,
   Text,
@@ -10,7 +10,6 @@ import {
   View,
 } from 'react-native';
 import {Focus, Overlay} from '../native';
-import {isSnakePeeking, setSnakePeeking} from '../state/bootstrap';
 import {Storage} from '../state/storage';
 import {formatRemaining, useFocusSession} from '../state/useFocusSession';
 
@@ -104,44 +103,45 @@ const SEGMENT_DATA: Segment[] = buildSpiral();
 const SEGMENTS = SEGMENT_DATA.length;
 
 
-/** Idle: a coiled snake, small enough not to punch a hole in the app below. */
+/** At rest the snake is in the bezel, so this only has to fit the tail. */
 export const SNAKE_LAYOUT = {
-  width: 120,
-  height: 110,
+  width: 96,
+  height: 64,
   gravity: 'top' as const,
   touchThrough: true,
   focusable: false,
 };
 
 /**
- * Peek: the snake has retreated up behind the bezel and only the tip of its
- * tail is showing. Small enough to be ignorable, big enough to grab.
+ * THE SNAKE LIVES IN THE BEZEL.
+ *
+ * dragY is the one value driving everything, through three stops:
+ *
+ *   0 .......... tucked up behind the top edge, only the tail tip showing
+ *   COIL_AT .... fully out, coiled
+ *   MAX_DRAG ... fully extended into a line
+ *
+ * So how far the snake emerges is exactly how far you pull: a short tug barely
+ * brings it out, and only a full pull gets the whole animal on screen.
  */
-export const SNAKE_LAYOUT_PEEK = {
-  width: 64,
-  height: 34,
-  /**
-   * Offset clear of the status bar.
-   *
-   * The status bar is ~24dp of TYPE_STATUS_BAR, which sits ABOVE application
-   * overlays in z-order and swallows touches for the shade pull-down. At y=0
-   * the tail was drawn correctly but was completely untappable -- the system
-   * took every touch before it reached us.
-   */
-  y: 26,
-  gravity: 'top' as const,
-  touchThrough: true,
-  focusable: false,
-};
+const COIL_AT = 80;
 
-/** Idle this long with no session and no touch, and the snake goes to peek. */
-const IDLE_HIDE_MS = 10 * 60 * 1000;
+/** Vertical gap between segments while stacked up behind the bezel. */
+const BEZEL_SPACING = 3.2;
 
 /**
- * Force the snake to the bezel immediately, without waiting out the idle
- * timer. Used by the dev panel, and handy for demoing the peek state.
+ * Where the tail tip rests, measured from the top of the overlay window.
+ *
+ * Must clear the status bar (~24dp of TYPE_STATUS_BAR, which sits ABOVE
+ * application overlays and swallows touches for the shade pull-down). Anything
+ * above this line is drawn but cannot be grabbed.
  */
-export const PEEK_NOW_EVENT = 'tether:peekNow';
+const TAIL_REST_Y = 10;
+
+/** After a committed pull: hold the coil, then crawl home. */
+const COIL_HOLD_MS = 900;
+const CRAWL_HOME_MS = 2400;
+const RETRACT_MS = 450;
 
 /** Grown while dragging so a full pull is not clipped by the window. */
 export const SNAKE_LAYOUT_DRAGGING = {
@@ -185,18 +185,24 @@ const SnakeBody = React.memo(function SnakeBody({dragY}: SnakeBodyProps) {
   return (
     <>
       {SEGMENT_DATA.map((seg, i) => {
-        // The tail starts moving first, so outer segments lead the uncoil.
-        const startAt = ((SEGMENTS - 1 - i) / SEGMENTS) * 90;
         const isHead = i === 0;
 
+        /**
+         * Resting position behind the bezel: the whole body stacked upward
+         * from the tail, so everything but the last few segments sits above
+         * the window and is clipped away.
+         */
+        const bezelY =
+          TAIL_REST_Y - 44 - (SEGMENTS - 1 - i) * BEZEL_SPACING;
+
         const translateX = dragY.interpolate({
-          inputRange: [startAt, MAX_DRAG_DP],
-          outputRange: [seg.coilX, 0],
+          inputRange: [0, COIL_AT, MAX_DRAG_DP],
+          outputRange: [0, seg.coilX, 0],
           extrapolate: 'clamp',
         });
         const translateY = dragY.interpolate({
-          inputRange: [startAt, MAX_DRAG_DP],
-          outputRange: [seg.coilY, MAX_DRAG_DP * seg.t],
+          inputRange: [0, COIL_AT, MAX_DRAG_DP],
+          outputRange: [bezelY, seg.coilY, MAX_DRAG_DP * seg.t],
           extrapolate: 'clamp',
         });
 
@@ -264,37 +270,33 @@ export default function SnakeOverlay() {
 
   const [minutes, setMinutes] = useState(0);
   const [dragging, setDragging] = useState(false);
-  /**
-   * Seeded by READING module scope, not from an initial prop.
-   *
-   * Props go native -> Bundle -> JS on mount, which is an extra hop that can
-   * arrive empty; the module variable is simply there. Same bundle, same JS
-   * context, so it is always current.
-   */
-  const [peeking, setPeekingState] = useState(() => isSnakePeeking());
-
-  // Keep the module-scope copy in step so the state survives a remount.
-  const setPeeking = (value: boolean) => {
-    setSnakePeeking(value);
-    setPeekingState(value);
-  };
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** True while the snake is animating back home after a release. */
+  const [returning, setReturning] = useState(false);
 
   const pan = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !session.isActive,
+        /**
+         * The window is grown on touch-DOWN, not on grant.
+         *
+         * Growing it once the drag was already underway re-laid-out the view
+         * mid-gesture and swallowed most of the travel: a 420px pull was
+         * registering as ~25dp, so the readout crept to 10 min and the release
+         * never cleared the commit threshold. Resizing before any movement is
+         * measured keeps gesture.dy honest.
+         */
+        onStartShouldSetPanResponder: () => {
+          if (session.isActive) {
+            return false;
+          }
+          grow();
+          return true;
+        },
         onMoveShouldSetPanResponder: () => !session.isActive,
 
         onPanResponderGrant: () => {
-          wake();
+          grow();
           setDragging(true);
-          if (!grown.current) {
-            grown.current = true;
-            Overlay.setLayout('SnakeOverlay', SNAKE_LAYOUT_DRAGGING).catch(
-              () => {},
-            );
-          }
         },
 
         onPanResponderMove: (_, gesture) => {
@@ -312,9 +314,10 @@ export default function SnakeOverlay() {
 
         onPanResponderRelease: async () => {
           const distance = dragRef.current;
-          recoil();
+          const committed = distance >= COMMIT_THRESHOLD_DP;
+          recoil(committed);
 
-          if (distance < COMMIT_THRESHOLD_DP) {
+          if (!committed) {
             return; // a tap, not a pull
           }
           Vibration.vibrate(30); // commit
@@ -322,26 +325,83 @@ export default function SnakeOverlay() {
           await Focus.startSession(minutesFor(distance), blocklist);
         },
 
-        onPanResponderTerminate: recoil,
+        onPanResponderTerminate: () => recoil(false),
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [session.isActive],
   );
 
-  function recoil() {
+  function grow() {
+    if (grown.current) {
+      return;
+    }
+    grown.current = true;
+    Overlay.setLayout('SnakeOverlay', SNAKE_LAYOUT_DRAGGING).catch(() => {});
+  }
+
+  /**
+   * A committed pull earns the full performance: the snake settles into a coil,
+   * sits there for a beat, then crawls slowly back up into the bezel. A pull
+   * too short to start anything just retracts -- it never fully emerges, so
+   * there is nothing to show off.
+   */
+  function recoil(committed: boolean) {
     dragRef.current = 0;
     lastMinutes.current = 0;
     setMinutes(0);
     setDragging(false);
+    setReturning(true);
 
-    Animated.spring(dragY, {
-      toValue: 0,
-      useNativeDriver: true,
-      tension: 70,
-      friction: 11,
-    }).start(() => {
+    const done = () => {
       grown.current = false;
-    });
+      setReturning(false);
+    };
+
+    // Belt and braces: a stuck animation must never strand the huge drag
+    // window on screen, blocking a 170x440dp slab of whatever is underneath.
+    const total = committed
+      ? COIL_HOLD_MS + CRAWL_HOME_MS + 1200
+      : RETRACT_MS + 400;
+    setTimeout(done, total);
+
+    if (!committed) {
+      Animated.timing(dragY, {
+        toValue: 0,
+        duration: RETRACT_MS,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }).start(done);
+      return;
+    }
+
+    Animated.sequence([
+      Animated.spring(dragY, {
+        toValue: COIL_AT,
+        useNativeDriver: true,
+        tension: 60,
+        friction: 10,
+      }),
+      /**
+       * A hold, expressed as a no-op timing rather than Animated.delay.
+       *
+       * Animated.delay defaults to the JS driver, and mixing drivers inside one
+       * sequence broke the chain: the snake animated home correctly but the
+       * completion callback never fired, so the window stayed at its full
+       * drag size and the session pills rendered halfway down the screen.
+       */
+      Animated.timing(dragY, {
+        toValue: COIL_AT,
+        duration: COIL_HOLD_MS,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+      Animated.timing(dragY, {
+        toValue: 0,
+        duration: CRAWL_HOME_MS,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start(done);
   }
 
   /**
@@ -355,57 +415,17 @@ export default function SnakeOverlay() {
    */
   const resting = session.isActive || session.isLockedOut;
 
-  /** Any interaction brings the snake back out and restarts the idle clock. */
-  function wake() {
-    setPeeking(false);
-    if (idleTimer.current) {
-      clearTimeout(idleTimer.current);
-      idleTimer.current = null;
-    }
-  }
-
-  // The snake stays fully visible for the whole of an operation, and only
-  // retreats to the bezel after a long stretch of doing nothing.
   useEffect(() => {
-    if (idleTimer.current) {
-      clearTimeout(idleTimer.current);
-      idleTimer.current = null;
-    }
-    if (resting || dragging) {
-      setPeeking(false);
+    // The big window has to stay up for the whole crawl home, or the snake
+    // would be clipped halfway through its own exit.
+    if (dragging || returning) {
       return;
-    }
-    idleTimer.current = setTimeout(() => setPeeking(true), IDLE_HIDE_MS);
-    return () => {
-      if (idleTimer.current) {
-        clearTimeout(idleTimer.current);
-      }
-    };
-  }, [resting, dragging]);
-
-  useEffect(() => {
-    const sub = DeviceEventEmitter.addListener(PEEK_NOW_EVENT, () => {
-      if (!resting) {
-        setPeeking(true);
-      }
-    });
-    return () => sub.remove();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resting]);
-
-  useEffect(() => {
-    if (dragging) {
-      return; // the drag layout owns the window while a pull is in progress
     }
     Overlay.setLayout(
       'SnakeOverlay',
-      resting
-        ? SNAKE_LAYOUT_ACTIVE
-        : peeking
-        ? SNAKE_LAYOUT_PEEK
-        : SNAKE_LAYOUT,
+      resting ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT,
     ).catch(() => {});
-  }, [resting, dragging, peeking]);
+  }, [resting, dragging, returning]);
 
   const coiled = (
     <View style={styles.coil} pointerEvents="box-none">
@@ -414,34 +434,11 @@ export default function SnakeOverlay() {
     </View>
   );
 
-  /**
-   * Peek and idle share ONE gesture host that is never unmounted.
-   *
-   * They used to be separate early-returns, so waking from peek swapped the
-   * render branch mid-gesture and destroyed the very view holding the
-   * responder. React Native then fired onPanResponderTerminate and cancelled
-   * the pull: the snake came out, but no session ever started.
-   *
-   * The gesture also lives on the host rather than the tail segments now. At
-   * this size the whole snake is barely a thumb wide, so restricting the grab
-   * to the tail bought nothing and made the target needlessly fussy.
-   */
   if (!resting) {
     return (
-      <View
-        style={peeking ? styles.peekRoot : styles.root}
-        pointerEvents="box-none">
-        <View
-          {...pan.panHandlers}
-          style={peeking ? styles.peekGrab : styles.coilGrab}>
-          {peeking ? (
-            <>
-              <View style={styles.peekBody} />
-              <View style={styles.peekTip} />
-            </>
-          ) : (
-            coiled
-          )}
+      <View style={styles.root} pointerEvents="box-none">
+        <View {...pan.panHandlers} style={styles.coilGrab}>
+          {coiled}
         </View>
       </View>
     );
@@ -455,7 +452,9 @@ export default function SnakeOverlay() {
 
   return (
     <View style={styles.activeRow} pointerEvents="box-none">
-      <View style={styles.activeCoil}>{coiled}</View>
+      <View {...pan.panHandlers} style={styles.activeCoil}>
+        {coiled}
+      </View>
 
       <TouchableOpacity
         style={[styles.pill, lockedOut && styles.pillLocked]}
@@ -515,36 +514,8 @@ const styles = StyleSheet.create({
   readoutValue: {color: '#4ade80', fontWeight: '800', fontSize: 20},
   readoutUnit: {color: '#86efac', fontWeight: '600', fontSize: 11},
 
-  peekRoot: {flex: 1, alignItems: 'center'},
   /** Gesture host in the coil state; sized to the coil so it catches the body. */
   coilGrab: {width: COIL_BOX, height: 150, alignItems: 'center'},
-  /** Generous hit area; the visible part is deliberately tiny. */
-  peekGrab: {
-    width: 64,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-  },
-  // Reads as a body disappearing up behind the bezel, tapering to a tip.
-  peekBody: {
-    width: 22,
-    height: 15,
-    borderBottomLeftRadius: 11,
-    borderBottomRightRadius: 11,
-    backgroundColor: '#22c55e',
-    borderWidth: 1.5,
-    borderTopWidth: 0,
-    borderColor: '#14532d',
-  },
-  peekTip: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#4ade80',
-    borderWidth: 1,
-    borderColor: '#14532d',
-    marginTop: 1,
-  },
   activeRow: {
     flex: 1,
     flexDirection: 'row',
@@ -554,19 +525,15 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   /**
-   * Must be the coil's REAL box (COIL_BOX x 100), not the size it appears at
-   * after scaling. A smaller wrapper does not crop the coil -- it overflows it,
-   * and the overlay window then clips the snake's lower body off.
-   *
-   * `transform: scale` does not shrink the layout box, so the negative side
-   * margins claw back the empty space the scale leaves, keeping the row tight.
+   * Same box and same top alignment as the resting window, so the tail is
+   * clipped identically. Centring it here (or scaling it) made the snake look
+   * noticeably longer during a session than at rest.
    */
   activeCoil: {
-    width: COIL_BOX,
-    height: 100,
-    transform: [{scale: 0.5}],
-    marginLeft: -26,
-    marginRight: -26,
+    width: 96,
+    height: 64,
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
   },
   pill: {
     backgroundColor: '#16a34a',

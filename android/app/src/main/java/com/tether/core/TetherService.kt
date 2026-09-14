@@ -60,9 +60,26 @@ class TetherService : Service() {
     /** Guards against the 1s tick re-running end-of-session side effects. */
     private var endHandled = false
 
+    /** Last active state the notification was rendered for. */
+    private var lastNotifiedActive: Boolean? = null
+
     private val tick = object : Runnable {
         override fun run() {
             if (!ticking) return
+
+            /**
+             * Refresh the notification whenever the session flips state.
+             *
+             * The tick below only redraws it while a session is RUNNING, so
+             * stopping one from the snake pill or the app left a frozen
+             * countdown in the shade -- the app said Idle while the
+             * notification still read "115:50 left".
+             */
+            val active = FocusSessionStore.isActive
+            if (active != lastNotifiedActive) {
+                lastNotifiedActive = active
+                updateNotification()
+            }
 
             // Reminders and lockout run independently of focus sessions.
             checkReminders()
