@@ -13,32 +13,101 @@ import {Storage} from '../state/storage';
 import {formatRemaining, useFocusSession} from '../state/useFocusSession';
 
 /* ---- tuning knobs: this is the feel of the whole product ---- */
-const MINUTES_PER_DP = 0.4; // 340dp of drag ~= 120 min
+const MINUTES_PER_DP = 0.4;
 const MIN_MINUTES = 5;
 const MAX_MINUTES = 120;
 const SNAP_MINUTES = 5;
 const MAX_DRAG_DP = 340;
 const COMMIT_THRESHOLD_DP = 20;
-const SEGMENTS = 10;
-const HANDLE_SIZE = 34;
+
+const HEAD_SIZE = 26;
+const TAIL_SIZE = 7;
 
 /**
- * Idle: a small pill. The window swallows every touch inside its bounds, so at
- * rest it must be no bigger than the handle -- otherwise it punches a dead zone
- * into whatever app is underneath.
+ * Spiral geometry -- two competing constraints:
+ *
+ *  1. Consecutive segments must OVERLAP along the path, or the body reads as a
+ *     row of dots instead of a continuous snake.
+ *  2. Successive TURNS must NOT overlap, or the whole thing reads as a blob.
+ *
+ * Stepping by a constant angle fails both at once: circles bunch up near the
+ * centre and gap badly at the rim. So we walk the spiral by constant ARC LENGTH
+ * instead -- dTheta = arcStep / radius -- which keeps body spacing even, and let
+ * the radius grow fast enough that neighbouring turns stay clear.
  */
+const ARC_STEP = 10; // dp between segment centres, < body width => continuous
+const GROWTH_PER_RADIAN = 4.1; // => ~25dp between turns, > body width => separated
+const START_RADIUS = 12;
+const MAX_RADIUS = 58;
+const COIL_BOX = 170;
+
+type Segment = {
+  size: number;
+  color: string;
+  coilX: number;
+  coilY: number;
+  /** 0 at the head, 1 at the tail. */
+  t: number;
+};
+
+/** Walk the spiral outward from the head until it reaches MAX_RADIUS. */
+function buildSpiral(): Segment[] {
+  const points: {x: number; y: number}[] = [];
+  let theta = 0;
+  let radius = START_RADIUS;
+
+  while (radius < MAX_RADIUS && points.length < 60) {
+    points.push({x: radius * Math.cos(theta), y: radius * Math.sin(theta)});
+    const dTheta = ARC_STEP / radius;
+    theta += dTheta;
+    radius += GROWTH_PER_RADIAN * dTheta;
+  }
+
+  const n = points.length;
+  return points.map((p, i) => {
+    const t = i / (n - 1);
+    return {
+      t,
+      size: HEAD_SIZE - (HEAD_SIZE - TAIL_SIZE) * t,
+      // Head is deepest green, body lightens toward the tail.
+      color:
+        i === 0
+          ? '#166534'
+          : `rgb(${Math.round(34 + t * 70)}, ${Math.round(
+              180 - t * 10,
+            )}, ${Math.round(84 + t * 50)})`,
+      coilX: p.x,
+      coilY: p.y,
+    };
+  });
+}
+
+const SEGMENT_DATA: Segment[] = buildSpiral();
+const SEGMENTS = SEGMENT_DATA.length;
+
+
+/** Idle: a coiled snake, small enough not to punch a hole in the app below. */
 export const SNAKE_LAYOUT = {
-  width: 96,
-  height: 56,
+  width: 180,
+  height: 160,
   gravity: 'top' as const,
   touchThrough: true,
   focusable: false,
 };
 
-/** Grown on drag start so a full-length pull is not clipped by the window. */
+/** Grown while dragging so a full pull is not clipped by the window. */
 export const SNAKE_LAYOUT_DRAGGING = {
   width: 220,
-  height: 440,
+  height: 460,
+  gravity: 'top' as const,
+  touchThrough: true,
+  focusable: false,
+};
+
+/** Active: coiled snake plus the timer and add-reminder pills beside it. */
+export const SNAKE_LAYOUT_ACTIVE = {
+  width: 320,
+  height: 80,
   gravity: 'top' as const,
   touchThrough: true,
   focusable: false,
@@ -53,13 +122,15 @@ function minutesFor(dragDp: number): number {
 /**
  * PERSON 1 (Person A) owns this file.
  *
- * The demo hook: drag the handle down, the snake stretches, release to start a
- * focus session whose length is proportional to how far you pulled.
+ * The demo hook: a green snake coiled at the top of the screen. Grab its tail,
+ * pull down, and it uncoils -- the further you pull, the longer the focus
+ * session. Release and it recoils, with a timer pill and an add-reminder pill
+ * appearing beside it.
  */
 export default function SnakeOverlay() {
   const session = useFocusSession();
 
-  // Animated.Value, NOT state. Driving this from setState re-rendered the whole
+  // Animated.Value, NOT state: driving this from setState re-rendered the whole
   // tree 60x/second and visibly stuttered during the one moment that matters.
   const dragY = useRef(new Animated.Value(0)).current;
 
@@ -67,8 +138,6 @@ export default function SnakeOverlay() {
   const lastMinutes = useRef(0);
   const grown = useRef(false);
 
-  // The only thing that legitimately needs React state: the label text, which
-  // cannot be driven by the native driver. Updated ~10x per drag, not 60x/s.
   const [minutes, setMinutes] = useState(0);
   const [dragging, setDragging] = useState(false);
 
@@ -103,7 +172,7 @@ export default function SnakeOverlay() {
 
         onPanResponderRelease: async () => {
           const distance = dragRef.current;
-          reset();
+          recoil();
 
           if (distance < COMMIT_THRESHOLD_DP) {
             return; // a tap, not a pull
@@ -113,13 +182,13 @@ export default function SnakeOverlay() {
           await Focus.startSession(minutesFor(distance), blocklist);
         },
 
-        onPanResponderTerminate: reset,
+        onPanResponderTerminate: recoil,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [session.isActive],
   );
 
-  function reset() {
+  function recoil() {
     dragRef.current = 0;
     lastMinutes.current = 0;
     setMinutes(0);
@@ -128,103 +197,189 @@ export default function SnakeOverlay() {
     Animated.spring(dragY, {
       toValue: 0,
       useNativeDriver: true,
-      tension: 90,
-      friction: 9,
+      tension: 70,
+      friction: 11,
     }).start(() => {
       grown.current = false;
-      Overlay.setLayout('SnakeOverlay', SNAKE_LAYOUT).catch(() => {});
+      // Session state decides which resting layout we return to.
+      Overlay.setLayout(
+        'SnakeOverlay',
+        session.isActive || session.isLockedOut
+          ? SNAKE_LAYOUT_ACTIVE
+          : SNAKE_LAYOUT,
+      ).catch(() => {});
     });
   }
 
-  if (session.isActive) {
+  const coiled = (
+    <View style={styles.coil} pointerEvents="box-none">
+      {SEGMENT_DATA.map((seg, i) => {
+        // The tail starts moving first, so outer segments lead the uncoil.
+        const startAt = ((SEGMENTS - 1 - i) / SEGMENTS) * 90;
+        // The whole tail region is draggable, not a single 7dp dot -- both
+        // because that is a usable touch target and because "grab the tail" is
+        // what the gesture is supposed to feel like.
+        const isTail = i >= SEGMENTS - 7;
+        const isHead = i === 0;
+
+        const translateX = dragY.interpolate({
+          inputRange: [startAt, MAX_DRAG_DP],
+          outputRange: [seg.coilX, 0],
+          extrapolate: 'clamp',
+        });
+        const translateY = dragY.interpolate({
+          inputRange: [startAt, MAX_DRAG_DP],
+          outputRange: [seg.coilY, MAX_DRAG_DP * seg.t],
+          extrapolate: 'clamp',
+        });
+
+        return (
+          <Animated.View
+            key={i}
+            {...(isTail ? pan.panHandlers : {})}
+            style={[
+              styles.segment,
+              {
+                width: seg.size,
+                height: seg.size,
+                borderRadius: seg.size / 2,
+                backgroundColor: seg.color,
+                marginLeft: -seg.size / 2,
+                marginTop: -seg.size / 2,
+                zIndex: SEGMENTS - i,
+                transform: [{translateX}, {translateY}],
+              },
+            ]}>
+            {isHead ? (
+              <View style={styles.face}>
+                <View style={styles.eye} />
+                <View style={styles.eye} />
+              </View>
+            ) : null}
+          </Animated.View>
+        );
+      })}
+
+      {/* duration readout, anchored to the head so it stays legible */}
+      {dragging ? (
+        <View style={styles.readout}>
+          <Text style={styles.readoutValue}>{minutes}</Text>
+          <Text style={styles.readoutUnit}>min</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  // --- resting, no session -------------------------------------------------
+  if (!session.isActive && !session.isLockedOut) {
     return (
       <View style={styles.root} pointerEvents="box-none">
-        <TouchableOpacity
-          style={styles.activePill}
-          onPress={() => Focus.stopSession()}>
-          <Text style={styles.activeText}>
-            {formatRemaining(session.remainingMs)}
-          </Text>
-        </TouchableOpacity>
+        {coiled}
       </View>
     );
   }
 
-  return (
-    <View style={styles.root} pointerEvents="box-none">
-      {/* body: a tapered trail following the handle, all on the native driver */}
-      {dragging &&
-        Array.from({length: SEGMENTS}).map((_, i) => {
-          const t = (i + 1) / (SEGMENTS + 1);
-          const size = HANDLE_SIZE - t * 20;
-          return (
-            <Animated.View
-              key={i}
-              pointerEvents="none"
-              style={[
-                styles.segment,
-                {
-                  width: size,
-                  height: size,
-                  borderRadius: size / 2,
-                  opacity: 1 - t * 0.6,
-                  transform: [
-                    {
-                      translateY: dragY.interpolate({
-                        inputRange: [0, MAX_DRAG_DP],
-                        outputRange: [0, MAX_DRAG_DP * t],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            />
-          );
-        })}
+  // --- active: coil + the two pills ---------------------------------------
+  const lockedOut = session.isLockedOut;
+  const label = lockedOut
+    ? formatRemaining(session.lockoutRemainingMs)
+    : formatRemaining(session.remainingMs);
 
-      <Animated.View
-        {...pan.panHandlers}
-        style={[styles.handle, {transform: [{translateY: dragY}]}]}>
-        <Text style={styles.handleText}>{dragging ? `${minutes}` : '↓'}</Text>
-        {dragging ? <Text style={styles.handleUnit}>min</Text> : null}
-      </Animated.View>
+  return (
+    <View style={styles.activeRow} pointerEvents="box-none">
+      <View style={styles.activeCoil}>{coiled}</View>
+
+      <TouchableOpacity
+        style={[styles.pill, lockedOut && styles.pillLocked]}
+        onPress={() => !lockedOut && Focus.stopSession()}>
+        <Text style={styles.pillText}>{label}</Text>
+        {lockedOut ? <Text style={styles.pillSub}>locked</Text> : null}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.plusPill}
+        onPress={() =>
+          Overlay.show(
+            'ReminderOverlay',
+            {
+              width: Overlay.MATCH_PARENT,
+              height: Overlay.MATCH_PARENT,
+              gravity: 'center',
+              focusable: true,
+              touchThrough: false,
+            },
+            {},
+          )
+        }>
+        <Text style={styles.plusText}>+</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1, alignItems: 'center'},
-  handle: {
+  root: {flex: 1, alignItems: 'center', justifyContent: 'flex-start'},
+  coil: {width: COIL_BOX, height: 150, marginTop: 8},
+  segment: {
     position: 'absolute',
-    top: 6,
-    width: 72,
-    height: HANDLE_SIZE,
-    borderRadius: HANDLE_SIZE / 2,
-    backgroundColor: '#1f6feb',
+    left: '50%',
+    top: 66,
     alignItems: 'center',
     justifyContent: 'center',
+    // A darker rim separates overlapping coils so the spiral stays readable.
+    borderWidth: 1.5,
+    borderColor: '#14532d',
+  },
+  face: {flexDirection: 'row', gap: 5, marginTop: -3},
+  eye: {width: 5, height: 5, borderRadius: 3, backgroundColor: '#f0fdf4'},
+  readout: {
+    position: 'absolute',
+    left: 112,
+    top: 48,
     flexDirection: 'row',
+    alignItems: 'baseline',
     gap: 3,
-    elevation: 6,
+    backgroundColor: '#052e16',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  handleText: {color: '#fff', fontWeight: '800', fontSize: 17},
-  handleUnit: {color: '#cfe0ff', fontWeight: '600', fontSize: 11},
-  segment: {position: 'absolute', top: 6, backgroundColor: '#1f6feb'},
-  activePill: {
-    position: 'absolute',
-    top: 6,
-    paddingHorizontal: 16,
-    height: HANDLE_SIZE,
-    borderRadius: HANDLE_SIZE / 2,
-    backgroundColor: '#1f6feb',
+  readoutValue: {color: '#4ade80', fontWeight: '800', fontSize: 20},
+  readoutUnit: {color: '#86efac', fontWeight: '600', fontSize: 11},
+
+  activeRow: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingTop: 4,
+  },
+  activeCoil: {width: 60, height: 58, transform: [{scale: 0.36}]},
+  pill: {
+    backgroundColor: '#16a34a',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 18,
+    alignItems: 'center',
     elevation: 6,
   },
-  activeText: {
+  pillLocked: {backgroundColor: '#b91c1c'},
+  pillText: {
     color: '#fff',
     fontWeight: '800',
     fontSize: 15,
     fontVariant: ['tabular-nums'],
   },
+  pillSub: {color: '#fecaca', fontSize: 9, fontWeight: '700'},
+  plusPill: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+  },
+  plusText: {color: '#fff', fontSize: 24, fontWeight: '700', marginTop: -3},
 });

@@ -1,7 +1,12 @@
 import {DeviceEventEmitter, NativeModules} from 'react-native';
 
-const {TetherFocus, TetherOverlay, TetherBlocking, TetherPermissions} =
-  NativeModules;
+const {
+  TetherFocus,
+  TetherOverlay,
+  TetherBlocking,
+  TetherPermissions,
+  TetherReminders,
+} = NativeModules;
 
 /* ------------------------------------------------------------------ */
 /* THE SHARED CONTRACT -- agree on this before splitting up            */
@@ -13,6 +18,22 @@ export type FocusState = {
   endAtMs: number;
   remainingMs: number;
   remainingMinutes: number;
+};
+
+export type LockoutState = {
+  isLockedOut: boolean;
+  lockoutUntilMs: number;
+  lockoutRemainingMs: number;
+  lockoutLabel: string | null;
+};
+
+export type Reminder = {
+  id: string;
+  title: string;
+  dueAtMs: number;
+  /** How long the total lockout lasts once this falls due. */
+  lockMinutes: number;
+  fired: boolean;
 };
 
 export type InstalledApp = {
@@ -101,6 +122,30 @@ export const Overlay = {
 };
 
 /* ------------------------------------------------------------------ */
+/* Reminders + total lockout                                           */
+/* ------------------------------------------------------------------ */
+
+export const RemindersApi = {
+  list: (): Promise<Reminder[]> => TetherReminders.list(),
+
+  add: (input: {
+    title: string;
+    dueAtMs: number;
+    lockMinutes: number;
+  }): Promise<boolean> => TetherReminders.add(input),
+
+  remove: (id: string): Promise<boolean> => TetherReminders.remove(id),
+
+  getLockout: (): Promise<LockoutState> => TetherReminders.getLockout(),
+
+  /** Manual trigger, for demoing lockout without waiting for a due date. */
+  startLockout: (minutes: number, label?: string): Promise<boolean> =>
+    TetherReminders.startLockout(minutes, label ?? null),
+
+  stopLockout: (): Promise<boolean> => TetherReminders.stopLockout(),
+};
+
+/* ------------------------------------------------------------------ */
 /* Person B -- blocking                                                */
 /* ------------------------------------------------------------------ */
 
@@ -149,6 +194,12 @@ export const TetherEvents = {
   /** Person B produces this; Person C consumes it. */
   onForegroundApp: (fn: (e: ForegroundAppEvent) => void) =>
     DeviceEventEmitter.addListener('tether:foregroundApp', fn),
+
+  onLockoutChanged: (fn: (e: LockoutState) => void) =>
+    DeviceEventEmitter.addListener('tether:lockout', fn),
+
+  onRemindersChanged: (fn: () => void) =>
+    DeviceEventEmitter.addListener('tether:reminders', fn),
 };
 
 /** True when the native side is actually linked (i.e. not a stale JS-only build). */

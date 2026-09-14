@@ -8,6 +8,7 @@ import com.tether.modules.BlockingModule
 import com.tether.modules.FocusModule
 import com.tether.modules.OverlayModule
 import com.tether.modules.PermissionsModule
+import com.tether.modules.RemindersModule
 import com.tether.modules.StorageModule
 
 class TetherPackage : ReactPackage {
@@ -19,6 +20,7 @@ class TetherPackage : ReactPackage {
             BlockingModule(context),
             PermissionsModule(context),
             StorageModule(context),
+            RemindersModule(context),
         )
 
     override fun createViewManagers(context: ReactApplicationContext): List<ViewManager<*, *>> =

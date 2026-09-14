@@ -1,5 +1,11 @@
 import {useCallback, useEffect, useState} from 'react';
-import {Focus, FocusState, TetherEvents} from '../native';
+import {
+  Focus,
+  FocusState,
+  LockoutState,
+  RemindersApi,
+  TetherEvents,
+} from '../native';
 
 const EMPTY: FocusState = {
   isActive: false,
@@ -13,12 +19,21 @@ const EMPTY: FocusState = {
  * Subscribes to the native session. Works from the main app AND from inside an
  * overlay -- both run in the same JS context, so both get the same events.
  */
+const NO_LOCKOUT: LockoutState = {
+  isLockedOut: false,
+  lockoutUntilMs: 0,
+  lockoutRemainingMs: 0,
+  lockoutLabel: null,
+};
+
 export function useFocusSession() {
   const [state, setState] = useState<FocusState>(EMPTY);
+  const [lockout, setLockout] = useState<LockoutState>(NO_LOCKOUT);
 
   const refresh = useCallback(async () => {
     try {
       setState(await Focus.getState());
+      setLockout(await RemindersApi.getLockout());
     } catch {
       /* native not linked yet -- rebuild the app */
     }
@@ -35,14 +50,31 @@ export function useFocusSession() {
       })),
     );
     const session = TetherEvents.onSessionChanged(setState);
+    const lock = TetherEvents.onLockoutChanged(setLockout);
+
+    // The native tick does not push lockout every second, so count down locally
+    // between pushes to keep the display smooth.
+    const local = setInterval(() => {
+      setLockout(prev =>
+        prev.isLockedOut
+          ? {
+              ...prev,
+              lockoutRemainingMs: Math.max(0, prev.lockoutUntilMs - Date.now()),
+              isLockedOut: prev.lockoutUntilMs > Date.now(),
+            }
+          : prev,
+      );
+    }, 1000);
 
     return () => {
       tick.remove();
       session.remove();
+      lock.remove();
+      clearInterval(local);
     };
   }, [refresh]);
 
-  return {...state, refresh};
+  return {...state, ...lockout, refresh};
 }
 
 export function formatRemaining(ms: number): string {

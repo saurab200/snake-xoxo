@@ -44,4 +44,6 @@ object TetherEvents {
     const val TICK = "tether:tick"                 // { remainingMs, remainingMinutes }
     const val SESSION_CHANGED = "tether:session"   // { isActive, durationMinutes, endAtMs }
     const val FOREGROUND_APP = "tether:foregroundApp" // { packageName, blocked }
+    const val LOCKOUT_CHANGED = "tether:lockout"   // { isLockedOut, lockoutUntilMs, ... }
+    const val REMINDERS_CHANGED = "tether:reminders" // {}
 }

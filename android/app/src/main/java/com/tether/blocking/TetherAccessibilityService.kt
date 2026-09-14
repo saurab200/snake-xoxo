@@ -72,6 +72,14 @@ class TetherAccessibilityService : AccessibilityService() {
      */
     private var ignoredDynamic: Set<String> = emptySet()
 
+    /**
+     * During a lockout we close the blocked app outright, which immediately fires
+     * an unblocked launcher event that would otherwise hide the wall in the same
+     * frame -- the exact bug that made the wall flash and vanish. Pinning it for a
+     * moment lets the user actually read why their app just disappeared.
+     */
+    private var pinWallUntilMs: Long = 0L
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         // This service can start the process before the user ever opens the app,
@@ -96,7 +104,7 @@ class TetherAccessibilityService : AccessibilityService() {
 
         if (blocked) {
             onBlockedAppOpened(pkg)
-        } else {
+        } else if (System.currentTimeMillis() >= pinWallUntilMs) {
             // The user genuinely navigated away from the blocked app (usually via
             // Home), so take the wall down.
             OverlayManager.hide(this, "BlockOverlay")
@@ -117,13 +125,19 @@ class TetherAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     private fun onBlockedAppOpened(pkg: String) {
-        // Deliberately NOT calling performGlobalAction(GLOBAL_ACTION_HOME) here.
+        val lockedOut = FocusSessionStore.isLockedOut()
+
+        // During a normal focus session we do NOT force home: the full-screen
+        // focusable overlay already prevents interaction, and forcing home used to
+        // race the hide branch and make the wall vanish.
         //
-        // It used to. Going home fires a fresh window-state-changed event for the
-        // launcher, which is not blocked, which ran the hide branch above -- so the
-        // wall appeared and vanished within a frame or two. The full-screen
-        // focusable overlay already prevents interaction with the app underneath,
-        // so forcing home bought nothing and cost the entire feature.
+        // A lockout is different -- the app is meant to disappear, not just be
+        // covered -- so there we close it and pin the wall briefly.
+        if (lockedOut) {
+            pinWallUntilMs = System.currentTimeMillis() + 2500L
+            performGlobalAction(GLOBAL_ACTION_HOME)
+        }
+
         OverlayManager.show(
             context = this,
             name = "BlockOverlay",
@@ -138,6 +152,8 @@ class TetherAccessibilityService : AccessibilityService() {
                 putString("packageName", pkg)
                 putString("appLabel", AppList.labelFor(this@TetherAccessibilityService, pkg))
                 putInt("remainingMinutes", FocusSessionStore.remainingMinutes())
+                putBoolean("lockedOut", lockedOut)
+                putString("lockoutLabel", FocusSessionStore.lockoutLabel)
             },
         )
     }

@@ -30,6 +30,36 @@ object FocusSessionStore {
     @Volatile
     var blocklist: Set<String> = emptySet()
 
+    /* ---- LOCKOUT ----------------------------------------------------
+     * A second, stricter blocking mode, independent of focus sessions.
+     * Triggered when a reminder falls due. While locked out, blocked apps are
+     * closed on sight rather than merely covered, and there is no escape hatch.
+     */
+
+    @Volatile
+    var lockoutUntilMs: Long = 0L
+        private set
+
+    /** The reminder title that caused the lockout, shown on the wall. */
+    @Volatile
+    var lockoutLabel: String? = null
+        private set
+
+    fun startLockout(untilMs: Long, label: String?) {
+        lockoutUntilMs = untilMs
+        lockoutLabel = label
+    }
+
+    fun stopLockout() {
+        lockoutUntilMs = 0L
+        lockoutLabel = null
+    }
+
+    fun isLockedOut(): Boolean = lockoutUntilMs > System.currentTimeMillis()
+
+    fun lockoutRemainingMs(): Long =
+        (lockoutUntilMs - System.currentTimeMillis()).coerceAtLeast(0L)
+
     /** Packages whose foreground event should surface an integration widget. */
     @Volatile
     var widgetTriggers: Set<String> = emptySet()
@@ -68,5 +98,10 @@ object FocusSessionStore {
 
     fun remainingMinutes(): Int = Math.ceil(remainingMs() / 60_000.0).toInt()
 
-    fun isBlocked(pkg: String): Boolean = isActive && blocklist.contains(pkg)
+    /**
+     * A package is blocked during a focus session OR during a lockout. Person 2's
+     * accessibility service calls this on every app switch.
+     */
+    fun isBlocked(pkg: String): Boolean =
+        (isActive || isLockedOut()) && blocklist.contains(pkg)
 }

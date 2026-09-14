@@ -11,22 +11,28 @@ import App from './App';
 import {name as appName} from './app.json';
 
 import BlockOverlay from './src/overlays/BlockOverlay';
+import ReminderOverlay from './src/overlays/ReminderOverlay';
 import SnakeOverlay from './src/overlays/SnakeOverlay';
 import WidgetOverlay from './src/overlays/WidgetOverlay';
+import {startSnake} from './src/state/bootstrap';
 import {startWidgetTrigger} from './src/state/widgetTrigger';
-
-/**
- * Started at module scope, NOT from a React component.
- *
- * Android destroys MainActivity when the user leaves the app, which would unmount
- * anything mounted from App.tsx and silently kill the foreground-app listener --
- * so the Canvas widget would never appear over other apps. The JS context outlives
- * every activity, so starting it here is what makes the feature work at all.
- */
-startWidgetTrigger();
 
 AppRegistry.registerComponent(appName, () => App);
 
 AppRegistry.registerComponent('SnakeOverlay', () => SnakeOverlay);
 AppRegistry.registerComponent('BlockOverlay', () => BlockOverlay);
 AppRegistry.registerComponent('WidgetOverlay', () => WidgetOverlay);
+AppRegistry.registerComponent('ReminderOverlay', () => ReminderOverlay);
+
+/**
+ * Started at module scope, NOT from a React component.
+ *
+ * Android destroys MainActivity when the user leaves the app, which would unmount
+ * anything mounted from App.tsx and silently kill these. The JS context outlives
+ * every activity, so this is what makes the snake stay pinned to the top of the
+ * screen and the Canvas widget appear over other apps.
+ *
+ * Registered first so the components exist before anything tries to show them.
+ */
+startWidgetTrigger();
+startSnake();

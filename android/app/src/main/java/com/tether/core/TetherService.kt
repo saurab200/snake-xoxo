@@ -34,6 +34,7 @@ class TetherService : Service() {
         private const val CHANNEL_DONE_ID = "tether_done"
         private const val NOTIFICATION_ID = 42
         private const val NOTIFICATION_DONE_ID = 43
+        private const val NOTIFICATION_LOCKOUT_ID = 44
         private const val TICK_MS = 1000L
 
         const val ACTION_START = "com.tether.START"
@@ -62,6 +63,10 @@ class TetherService : Service() {
         override fun run() {
             if (!ticking) return
 
+            // Reminders and lockout run independently of focus sessions.
+            checkReminders()
+            checkLockoutExpiry()
+
             if (FocusSessionStore.isActive) {
                 endHandled = false
                 val remaining = FocusSessionStore.remainingMs()
@@ -80,8 +85,59 @@ class TetherService : Service() {
                     updateNotification()
                 }
             }
+            else if (FocusSessionStore.isLockedOut()) {
+                updateNotification()
+            }
             handler.postDelayed(this, TICK_MS)
         }
+    }
+
+    /** One reminder per tick is plenty; the next will fire a second later. */
+    private fun checkReminders() {
+        val due = Reminders.takeDue(this) ?: return
+        val until = System.currentTimeMillis() + due.lockMinutes * 60_000L
+        FocusSessionStore.startLockout(until, due.title)
+        notifyLockout(due.title, due.lockMinutes)
+        emitLockout()
+    }
+
+    private fun checkLockoutExpiry() {
+        if (FocusSessionStore.lockoutUntilMs != 0L && !FocusSessionStore.isLockedOut()) {
+            FocusSessionStore.stopLockout()
+            OverlayManager.hide(this, "BlockOverlay")
+            emitLockout()
+            updateNotification()
+        }
+    }
+
+    private fun emitLockout() {
+        RNBridge.emit(
+            this,
+            TetherEvents.LOCKOUT_CHANGED,
+            Arguments.createMap().apply {
+                putBoolean("isLockedOut", FocusSessionStore.isLockedOut())
+                putDouble("lockoutUntilMs", FocusSessionStore.lockoutUntilMs.toDouble())
+                putDouble(
+                    "lockoutRemainingMs",
+                    FocusSessionStore.lockoutRemainingMs().toDouble(),
+                )
+                putString("lockoutLabel", FocusSessionStore.lockoutLabel)
+            },
+        )
+    }
+
+    private fun notifyLockout(title: String, minutes: Int) {
+        vibrateDone()
+        notificationManager().notify(
+            NOTIFICATION_LOCKOUT_ID,
+            Notification.Builder(this, CHANNEL_DONE_ID)
+                .setContentTitle("Locked out - $title")
+                .setContentText("Distracting apps are blocked for $minutes min.")
+                .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
+                .setContentIntent(contentIntent())
+                .setAutoCancel(true)
+                .build()
+        )
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -224,8 +280,12 @@ class TetherService : Service() {
         val builder = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Tether")
             .setContentText(
-                if (active) "${formatRemaining(FocusSessionStore.remainingMs())} left"
-                else "Ready -- drag the snake to start"
+                when {
+                    FocusSessionStore.isLockedOut() ->
+                        "LOCKED - ${formatRemaining(FocusSessionStore.lockoutRemainingMs())} left"
+                    active -> "${formatRemaining(FocusSessionStore.remainingMs())} left"
+                    else -> "Ready -- drag the snake to start"
+                }
             )
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setContentIntent(contentIntent())

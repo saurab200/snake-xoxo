@@ -13,9 +13,10 @@ import {
   Overlay,
   PermissionStatus,
   Permissions,
+  RemindersApi,
 } from '../native';
-import {SNAKE_LAYOUT} from '../overlays/SnakeOverlay';
 import {WIDGET_LAYOUT} from '../overlays/WidgetOverlay';
+import {startSnake} from '../state/bootstrap';
 import {Storage} from '../state/storage';
 import {formatRemaining, useFocusSession} from '../state/useFocusSession';
 
@@ -28,7 +29,7 @@ const EMPTY_PERMS: PermissionStatus = {
 export default function HomeScreen() {
   const session = useFocusSession();
   const [perms, setPerms] = useState<PermissionStatus>(EMPTY_PERMS);
-  const [snakeUp, setSnakeUp] = useState(false);
+
 
   const refreshPerms = useCallback(async () => {
     setPerms(await Permissions.getStatus());
@@ -47,17 +48,6 @@ export default function HomeScreen() {
   }, [refreshPerms, session]);
 
   const allGranted = perms.overlay && perms.accessibility;
-
-  const showSnake = async () => {
-    await Focus.arm();
-    await Overlay.show('SnakeOverlay', SNAKE_LAYOUT);
-    setSnakeUp(true);
-  };
-
-  const hideSnake = async () => {
-    await Overlay.hide('SnakeOverlay');
-    setSnakeUp(false);
-  };
 
   return (
     <ScrollView contentContainerStyle={styles.root}>
@@ -93,15 +83,22 @@ export default function HomeScreen() {
 
       <Section title="2 · Snake">
         {!allGranted ? (
-          <Text style={styles.warn}>Grant the permissions above first.</Text>
-        ) : null}
+          <Text style={styles.warn}>
+            Grant the permissions above — the snake appears automatically once
+            you do.
+          </Text>
+        ) : (
+          <Text style={styles.hint}>
+            The snake is pinned to the top of your screen. Leave the app, grab
+            its tail and pull down — the further you pull, the longer the
+            session.
+          </Text>
+        )}
         <Button
-          label={snakeUp ? 'Hide snake' : 'Show snake'}
-          onPress={snakeUp ? hideSnake : showSnake}
+          label="Re-pin snake"
+          onPress={() => startSnake()}
+          muted
         />
-        <Text style={styles.hint}>
-          Then leave the app and drag the blue handle down.
-        </Text>
       </Section>
 
       <Section title="3 · Session">
@@ -156,6 +153,33 @@ export default function HomeScreen() {
               integrationId: 'canvas',
             })
           }
+          muted
+        />
+        <Button
+          label="Add a task / reminder"
+          onPress={() =>
+            Overlay.show(
+              'ReminderOverlay',
+              {
+                width: Overlay.MATCH_PARENT,
+                height: Overlay.MATCH_PARENT,
+                gravity: 'center',
+                focusable: true,
+                touchThrough: false,
+              },
+              {},
+            )
+          }
+          muted
+        />
+        <Button
+          label="Trigger 2 min lockout"
+          onPress={() => RemindersApi.startLockout(2, 'Demo lockout')}
+          muted
+        />
+        <Button
+          label="End lockout"
+          onPress={() => RemindersApi.stopLockout()}
           muted
         />
         <Button label="Hide all overlays" onPress={Overlay.hideAll} muted />
