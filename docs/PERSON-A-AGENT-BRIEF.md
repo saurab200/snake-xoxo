@@ -67,7 +67,7 @@ src/overlays/WidgetOverlay.tsx               Person C
 src/screens/BlocklistScreen.tsx              Person B
 src/screens/IntegrationsScreen.tsx           Person C
 src/integrations/*                           Person C
-src/state/useWidgetTrigger.ts                Person C
+src/state/widgetTrigger.ts                   Person C
 ```
 
 ### Files that are SHARED — coordinate before editing

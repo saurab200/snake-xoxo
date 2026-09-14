@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import {Focus, Overlay} from '../native';
 import {formatRemaining, useFocusSession} from '../state/useFocusSession';
@@ -6,27 +6,53 @@ import {formatRemaining, useFocusSession} from '../state/useFocusSession';
 type Props = {
   packageName?: string;
   appLabel?: string;
+  /** First-paint fallback only. The live value comes from useFocusSession. */
   remainingMinutes?: number;
 };
 
 /**
- * PERSON B owns this file.
+ * PERSON 2 (Person B) owns this file.
  *
  * Full-screen window shown when a blocked app is opened during a session.
  * Props are pushed in from TetherAccessibilityService.
  */
 export default function BlockOverlay(props: Props) {
   const session = useFocusSession();
+  const [dismissing, setDismissing] = useState(false);
   const label = props.appLabel ?? props.packageName ?? 'That app';
+
+  // When the session ends while the wall is up, show a completion state briefly
+  // and then take ourselves down. The user should never have to dismiss a wall
+  // for a session that is already over.
+  useEffect(() => {
+    if (session.isActive || dismissing) {
+      return;
+    }
+    setDismissing(true);
+    const t = setTimeout(() => Overlay.hide('BlockOverlay'), 2000);
+    return () => clearTimeout(t);
+  }, [session.isActive, dismissing]);
+
+  if (!session.isActive) {
+    return (
+      <View style={styles.root}>
+        <Text style={styles.done}>Session complete</Text>
+        <Text style={styles.timer}>{label} is available again</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
-      <Text style={styles.title}>{label} is blocked</Text>
-      <Text style={styles.timer}>
-        {session.isActive
-          ? `${formatRemaining(session.remainingMs)} left`
-          : 'Session ended'}
-      </Text>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.title}>is blocked</Text>
+
+      {/*
+        Live value from the tick event, not the mount-time prop -- otherwise this
+        number freezes at whatever it was when the wall appeared.
+      */}
+      <Text style={styles.timer}>{formatRemaining(session.remainingMs)}</Text>
+      <Text style={styles.timerCaption}>remaining</Text>
 
       <TouchableOpacity
         style={styles.button}
@@ -34,7 +60,7 @@ export default function BlockOverlay(props: Props) {
         <Text style={styles.buttonText}>Back to focus</Text>
       </TouchableOpacity>
 
-      {/* Escape hatch. Delete before the demo if you want it to feel strict. */}
+      {/* Escape hatch. A demo nobody can exit is a demo that gets remembered badly. */}
       <TouchableOpacity
         style={styles.secondary}
         onPress={async () => {
@@ -55,15 +81,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 32,
   },
-  title: {color: '#fff', fontSize: 26, fontWeight: '700', textAlign: 'center'},
-  timer: {color: '#8b949e', fontSize: 16, marginTop: 12, marginBottom: 40},
+  label: {
+    color: '#fff',
+    fontSize: 34,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  title: {color: '#8b949e', fontSize: 20, marginTop: 2},
+  done: {color: '#3fb950', fontSize: 30, fontWeight: '800'},
+  timer: {
+    color: '#1f6feb',
+    fontSize: 52,
+    fontWeight: '800',
+    marginTop: 36,
+    fontVariant: ['tabular-nums'],
+  },
+  timerCaption: {color: '#6e7681', fontSize: 13, marginBottom: 44},
   button: {
     backgroundColor: '#1f6feb',
-    paddingHorizontal: 28,
-    paddingVertical: 14,
+    paddingHorizontal: 32,
+    paddingVertical: 15,
     borderRadius: 10,
   },
   buttonText: {color: '#fff', fontSize: 16, fontWeight: '600'},
-  secondary: {marginTop: 20, padding: 10},
+  secondary: {marginTop: 22, padding: 10},
   secondaryText: {color: '#8b949e', fontSize: 13},
 });

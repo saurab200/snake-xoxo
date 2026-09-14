@@ -10,7 +10,6 @@ import {
 import BlocklistScreen from './src/screens/BlocklistScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import IntegrationsScreen from './src/screens/IntegrationsScreen';
-import {useWidgetTrigger} from './src/state/useWidgetTrigger';
 
 type Tab = 'home' | 'blocklist' | 'integrations';
 
@@ -22,9 +21,6 @@ const TABS: {id: Tab; label: string}[] = [
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('home');
-
-  // B -> C seam. Mounted once, for the whole app.
-  useWidgetTrigger();
 
   return (
     <SafeAreaView style={styles.root}>

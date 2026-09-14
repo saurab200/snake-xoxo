@@ -5,6 +5,8 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import android.content.Intent
+import android.provider.Settings
 import com.tether.blocking.AppList
 import com.tether.blocking.TetherAccessibilityService
 
@@ -22,6 +24,20 @@ class BlockingModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun openAccessibilitySettings(promise: Promise) {
         TetherAccessibilityService.openSettings(reactContext)
+        promise.resolve(true)
+    }
+
+    /**
+     * Opens the general battery-optimisation list. Deliberately NOT
+     * ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, which is a Play-policy
+     * restricted intent -- the general screen needs no declaration.
+     */
+    @ReactMethod
+    fun openBatteryOptimizationSettings(promise: Promise) {
+        reactContext.startActivity(
+            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
         promise.resolve(true)
     }
 

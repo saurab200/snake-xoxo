@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import {
+  Blocking,
   Focus,
   Overlay,
   PermissionStatus,
@@ -78,6 +79,15 @@ export default function HomeScreen() {
           ok={perms.notifications}
           onPress={Permissions.openNotificationSettings}
         />
+        <Button
+          label="Battery: set to Unrestricted"
+          onPress={Blocking.openBatteryOptimizationSettings}
+          muted
+        />
+        <Text style={styles.hint}>
+          Android kills the timer service under battery optimisation. Find Tether
+          in the list and allow unrestricted background use.
+        </Text>
         <Button label="Re-check" onPress={refreshPerms} muted />
       </Section>
 

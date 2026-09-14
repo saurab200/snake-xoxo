@@ -12,6 +12,38 @@ Read this entire document before writing code.
 
 ---
 
+## STATUS — as of the latest commit
+
+Tasks 1–5 are **implemented**. Verify them on a device, then continue from Task 6.
+
+| Task | State | Notes |
+|---|---|---|
+| 1 — vanishing wall | **Done** | Strategy A: `performGlobalAction(GLOBAL_ACTION_HOME)` removed. The wall now persists until dismissed or the session ends. |
+| 2 — re-block reliably | **Done** | Dedup now exempts blocked packages: `if (pkg == lastPackage && !blocked) return`. |
+| 3 — live countdown | **Done** | `BlockOverlay` renders `formatRemaining(session.remainingMs)` and self-dismisses 2s after the session ends. |
+| 4 — dead service warning | **Done** | Red banner on the Blocked tab, re-checked on `AppState` → `active`. |
+| 5 — usable blocklist | **Done except icons** | Search, selected-first sorting, count, Clear all. Icons deliberately skipped — cosmetic, and encoding 200 PNGs blocks the UI thread. |
+| 6 — hardening | **Partly done** | Battery-optimisation button added to the Focus tab. Cold-start verification still needs a device **and** Person 1's Task 5 (session persistence). |
+
+### One deliberate deviation from Task 1 as written
+
+The task said to add the **launcher** to `IGNORED`. **Do not do this.** Going Home is
+how the user legitimately leaves a blocked app, and that launcher event is what
+dismisses the wall. Ignoring it would leave the wall stuck over the home screen.
+
+The keyboard (current IME) is ignored instead — resolved at `onServiceConnected`
+via `Settings.Secure.DEFAULT_INPUT_METHOD`. That was the real source of handler
+churn. The reasoning is in a comment on `IGNORED`; do not "fix" it back.
+
+### Still to do
+
+- Run Task 0 on a physical device and confirm Tasks 1–4 behave as described.
+- Task 6 cold-start check, once Person 1's session persistence lands.
+- Optionally, app icons (Task 5) if there is spare time at the end.
+
+
+---
+
 ## 1. Mission
 
 Tether blocks distracting apps during a focus session. **You own the blocking.**
@@ -69,7 +101,7 @@ src/overlays/SnakeOverlay.tsx                Person 1
 src/overlays/WidgetOverlay.tsx               Person 3
 src/screens/IntegrationsScreen.tsx           Person 3
 src/integrations/*                           Person 3
-src/state/useWidgetTrigger.ts                Person 3
+src/state/widgetTrigger.ts                   Person 3
 src/state/useFocusSession.ts                 Person 1
 ```
 
@@ -78,7 +110,7 @@ src/state/useFocusSession.ts                 Person 1
 ```
 src/native/index.ts        the typed contract. Adding is fine; changing an existing
                            signature breaks 1 and 3.
-index.js                   AppRegistry registrations.
+index.js                   AppRegistry registrations + startWidgetTrigger().
 App.tsx                    tab shell.
 src/screens/HomeScreen.tsx contains the dev-simulate panel everyone uses.
 AndroidManifest.xml        you own the <service> and <queries> blocks only.
@@ -528,8 +560,8 @@ Verify your slice alone before integrating:
    ```bash
    adb logcat -s ReactNativeJS:V
    ```
-   Add a temporary `console.log` in `useWidgetTrigger` if needed — **remove it
-   before committing**, that file belongs to Person 3.
+   Add a temporary `console.log` in `src/state/widgetTrigger.ts` if needed —
+   **remove it before committing**, that file belongs to Person 3.
 
 The full end-to-end path at integration is:
 **drag the snake → session starts → open Instagram → your wall appears → open

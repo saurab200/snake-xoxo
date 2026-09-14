@@ -12,6 +12,39 @@ Read this entire document before writing code.
 
 ---
 
+## STATUS — as of the latest commit
+
+Tasks 1–4 and 6 are **implemented**. Task 5 is partly done. Verify on a device.
+
+| Task | State | Notes |
+|---|---|---|
+| 1 — survive activity destruction | **Done** | Listener moved out of React into `src/state/widgetTrigger.ts`, started at module scope from `index.js`. `useWidgetTrigger.ts` deleted and removed from `App.tsx`. |
+| 2 — timeout + errors | **Done** | 8s `AbortController` timeout; 401/403, 404, timeout and generic failures each map to an actionable message. Retry button added. The token is never logged or echoed. |
+| 3 — caching | **Done** | `src/integrations/cache.ts`, 5-minute TTL, seeded into the overlay's initial state so returning paints instantly. Refresh (`↻`) forces a bypass. |
+| 4 — show/hide rule | **Done** | Rule: trigger package opens **AND** a session is active. Documented at the top of `widgetTrigger.ts`. Widget hides on `onSessionChanged` → inactive. `syncTriggerPackages()` now runs at startup. |
+| 5 — widget polish | **Partly done** | Collapse-to-pill via `Overlay.setLayout` (no remount), distinct loading/empty/error/populated states, list capped at 6. **Dragging and tapping a todo to open Canvas are NOT done.** |
+| 6 — prove extensibility | **Done** | `src/integrations/streak.ts` added — one new file plus one line in `registry.ts`, no change to `WidgetOverlay` or the interface. |
+
+### On `widgetTriggers` (was W4)
+
+`syncTriggerPackages()` is **kept**, and `registry.ts` now carries a comment saying
+why: nothing in Kotlin reads `FocusSessionStore.widgetTriggers` yet, but it is
+forward-compatible plumbing for moving the widget decision into the accessibility
+service so the widget could appear without waking JS. It is intentional, not
+leftover.
+
+### Still to do
+
+- Run Task 0 with a **real Canvas token** — the fetch path has never been exercised
+  against a live Canvas instance. This is the highest-value remaining check.
+- Task 1's acceptance test: swipe Tether from Recents, open a trigger app, confirm
+  the widget still appears.
+- Task 5 remainder: dragging, and `Linking.openURL` for todo items (drop it if it
+  does not work from an overlay — it has no Activity context).
+
+
+---
+
 ## 1. Mission
 
 Tether blocks distracting apps during a focus session. **You own the other half of
@@ -54,7 +87,9 @@ src/integrations/registry.ts           registration + lookup
 src/integrations/canvas.ts             Canvas API client
 src/overlays/WidgetOverlay.tsx         the floating card
 src/screens/IntegrationsScreen.tsx     host + token entry
-src/state/useWidgetTrigger.ts          the Person 2 -> Person 3 seam
+src/state/widgetTrigger.ts             the Person 2 -> Person 3 seam
+src/integrations/cache.ts              stale-while-revalidate cache
+src/integrations/streak.ts             second integration
 ```
 
 ### Files you may READ but MUST NOT EDIT
@@ -77,8 +112,8 @@ src/state/useFocusSession.ts                 Person 1
 ```
 src/native/index.ts        the typed contract. Adding is fine; changing an existing
                            signature breaks 1 and 2.
-index.js                   AppRegistry registrations.
-App.tsx                    tab shell — mounts useWidgetTrigger().
+index.js                   AppRegistry registrations + startWidgetTrigger().
+App.tsx                    tab shell.
 src/screens/HomeScreen.tsx contains the dev-simulate panel everyone uses.
 ```
 

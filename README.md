@@ -178,7 +178,8 @@ src/integrations/registry.ts                            add integrations here
 src/integrations/canvas.ts                              Canvas API client
 src/overlays/WidgetOverlay.tsx                          the floating card
 src/screens/IntegrationsScreen.tsx                      paste host + token
-src/state/useWidgetTrigger.ts                           the B -> C seam
+src/state/widgetTrigger.ts                              the B -> C seam
+src/integrations/cache.ts                               widget data cache
 ```
 **Consumes:** `tether:foregroundApp`.
 

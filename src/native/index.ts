@@ -113,6 +113,8 @@ export const Blocking = {
     TetherBlocking.getInstalledApps(),
   getSuggestedBlocklist: (): Promise<string[]> =>
     TetherBlocking.getSuggestedBlocklist(),
+  openBatteryOptimizationSettings: (): Promise<boolean> =>
+    TetherBlocking.openBatteryOptimizationSettings(),
 };
 
 /* ------------------------------------------------------------------ */
