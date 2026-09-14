@@ -133,6 +133,12 @@ Events flowing the other way (`src/native/index.ts`):
 
 Every file below has exactly one owner. Touch someone else's file only to fix a build.
 
+If you are handing your slice to an AI coding agent, give it the matching brief in
+[`docs/`](docs/) — it contains the full contract, task list, verification commands and
+failure modes.
+
+- Person A → [`docs/PERSON-A-AGENT-BRIEF.md`](docs/PERSON-A-AGENT-BRIEF.md)
+
 ### Person A — Interaction & timer
 ```
 src/overlays/SnakeOverlay.tsx                          drag -> duration, the demo hook
