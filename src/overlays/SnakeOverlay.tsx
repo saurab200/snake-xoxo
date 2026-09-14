@@ -135,6 +135,91 @@ function minutesFor(dragDp: number): number {
   return Math.min(MAX_MINUTES, Math.max(MIN_MINUTES, snapped));
 }
 
+
+type SnakeBodyProps = {
+  dragY: Animated.Value;
+  panHandlers: ReturnType<typeof PanResponder.create>['panHandlers'];
+};
+
+/**
+ * The snake body, memoised.
+ *
+ * All 31 segments move purely through Animated interpolations of dragY, so this
+ * tree never needs to re-render -- not when the minute readout changes at a
+ * detent, and not on the once-a-second session tick. Before the memo it was
+ * being reconciled ~10 times per drag and once per second during a session,
+ * rebuilding 31 views and 62 interpolation nodes each time for no visual gain.
+ */
+const SnakeBody = React.memo(function SnakeBody({
+  dragY,
+  panHandlers,
+}: SnakeBodyProps) {
+  return (
+    <>
+      {SEGMENT_DATA.map((seg, i) => {
+        // The tail starts moving first, so outer segments lead the uncoil.
+        const startAt = ((SEGMENTS - 1 - i) / SEGMENTS) * 90;
+        // The whole tail region is draggable, not a single 5dp dot -- both
+        // because that is a usable touch target and because "grab the tail" is
+        // what the gesture is supposed to feel like.
+        const isTail = i >= SEGMENTS - 7;
+        const isHead = i === 0;
+
+        const translateX = dragY.interpolate({
+          inputRange: [startAt, MAX_DRAG_DP],
+          outputRange: [seg.coilX, 0],
+          extrapolate: 'clamp',
+        });
+        const translateY = dragY.interpolate({
+          inputRange: [startAt, MAX_DRAG_DP],
+          outputRange: [seg.coilY, MAX_DRAG_DP * seg.t],
+          extrapolate: 'clamp',
+        });
+
+        return (
+          <Animated.View
+            key={i}
+            {...(isTail ? panHandlers : {})}
+            style={[
+              styles.segment,
+              {
+                width: seg.size,
+                height: seg.size,
+                borderRadius: seg.size / 2,
+                backgroundColor: seg.color,
+                marginLeft: -seg.size / 2,
+                marginTop: -seg.size / 2,
+                zIndex: SEGMENTS - i,
+                transform: [{translateX}, {translateY}],
+              },
+            ]}>
+            {isHead ? (
+              <View style={styles.face}>
+                <View style={styles.eye} />
+                <View style={styles.eye} />
+              </View>
+            ) : null}
+          </Animated.View>
+        );
+      })}
+    </>
+  );
+});
+
+/** Isolated so a detent re-renders one text node, not the whole body. */
+const DurationReadout = React.memo(function DurationReadout({
+  minutes,
+}: {
+  minutes: number;
+}) {
+  return (
+    <View style={styles.readout}>
+      <Text style={styles.readoutValue}>{minutes}</Text>
+      <Text style={styles.readoutUnit}>min</Text>
+    </View>
+  );
+});
+
 /**
  * PERSON 1 (Person A) owns this file.
  *
@@ -242,60 +327,8 @@ export default function SnakeOverlay() {
 
   const coiled = (
     <View style={styles.coil} pointerEvents="box-none">
-      {SEGMENT_DATA.map((seg, i) => {
-        // The tail starts moving first, so outer segments lead the uncoil.
-        const startAt = ((SEGMENTS - 1 - i) / SEGMENTS) * 90;
-        // The whole tail region is draggable, not a single 7dp dot -- both
-        // because that is a usable touch target and because "grab the tail" is
-        // what the gesture is supposed to feel like.
-        const isTail = i >= SEGMENTS - 7;
-        const isHead = i === 0;
-
-        const translateX = dragY.interpolate({
-          inputRange: [startAt, MAX_DRAG_DP],
-          outputRange: [seg.coilX, 0],
-          extrapolate: 'clamp',
-        });
-        const translateY = dragY.interpolate({
-          inputRange: [startAt, MAX_DRAG_DP],
-          outputRange: [seg.coilY, MAX_DRAG_DP * seg.t],
-          extrapolate: 'clamp',
-        });
-
-        return (
-          <Animated.View
-            key={i}
-            {...(isTail ? pan.panHandlers : {})}
-            style={[
-              styles.segment,
-              {
-                width: seg.size,
-                height: seg.size,
-                borderRadius: seg.size / 2,
-                backgroundColor: seg.color,
-                marginLeft: -seg.size / 2,
-                marginTop: -seg.size / 2,
-                zIndex: SEGMENTS - i,
-                transform: [{translateX}, {translateY}],
-              },
-            ]}>
-            {isHead ? (
-              <View style={styles.face}>
-                <View style={styles.eye} />
-                <View style={styles.eye} />
-              </View>
-            ) : null}
-          </Animated.View>
-        );
-      })}
-
-      {/* duration readout, anchored to the head so it stays legible */}
-      {dragging ? (
-        <View style={styles.readout}>
-          <Text style={styles.readoutValue}>{minutes}</Text>
-          <Text style={styles.readoutUnit}>min</Text>
-        </View>
-      ) : null}
+      <SnakeBody dragY={dragY} panHandlers={pan.panHandlers} />
+      {dragging ? <DurationReadout minutes={minutes} /> : null}
     </View>
   );
 

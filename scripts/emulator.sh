@@ -38,7 +38,11 @@ boot() {
   fi
 
   echo "booting $avd ..."
-  nohup "$EMULATOR" -avd "$avd" -gpu swiftshader_indirect -no-boot-anim \
+  # -gpu host uses the machine's real GPU. The software rasteriser
+  # (swiftshader_indirect) costs ~23ms per frame just to draw, which alone
+  # blows the 16.7ms budget and makes every animation look broken regardless of
+  # how the app is written. Fall back to swiftshader only if host GPU fails.
+  nohup "$EMULATOR" -avd "$avd" -gpu host -no-boot-anim \
     > /tmp/emulator.log 2>&1 &
 
   for _ in $(seq 1 90); do
