@@ -18,6 +18,13 @@ export type FocusState = {
   endAtMs: number;
   remainingMs: number;
   remainingMinutes: number;
+  /**
+   * Optional completion flag. The native layer does not currently set this on
+   * its session-end event, but the gamification dev simulation does, and JS
+   * consumers may read it when present. Absence is treated as "unknown" and the
+   * gamification store infers completion from the last observed tick instead.
+   */
+  completedSuccessfully?: boolean;
 };
 
 export type LockoutState = {

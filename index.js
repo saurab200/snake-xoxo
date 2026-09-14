@@ -17,6 +17,7 @@ import SnakeOverlay from './src/overlays/SnakeOverlay';
 import TaskCardOverlay from './src/overlays/TaskCardOverlay';
 import WidgetOverlay from './src/overlays/WidgetOverlay';
 import {startSnake} from './src/state/bootstrap';
+import {initializeGamification} from './src/state/gamificationStore';
 import {startWidgetTrigger} from './src/state/widgetTrigger';
 
 AppRegistry.registerComponent(appName, () => App);
@@ -38,5 +39,13 @@ AppRegistry.registerComponent('TaskCardOverlay', () => TaskCardOverlay);
  *
  * Registered first so the components exist before anything tries to show them.
  */
+/**
+ * Gamification goes first: it hydrates persisted points and installs the single
+ * session-completion listener. Same reasoning as the two below -- a component
+ * effect would be torn down when Android destroys MainActivity, and a session
+ * that completes while the user is in Instagram would never be credited.
+ * initializeGamification() is idempotent, so a re-import cannot double-register.
+ */
+initializeGamification();
 startWidgetTrigger();
 startSnake();
