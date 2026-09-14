@@ -137,7 +137,16 @@ If you are handing your slice to an AI coding agent, give it the matching brief 
 [`docs/`](docs/) — it contains the full contract, task list, verification commands and
 failure modes.
 
-- Person 1 / Person A → [`docs/PERSON-A-AGENT-BRIEF.md`](docs/PERSON-A-AGENT-BRIEF.md)
+| Slice | Brief |
+|---|---|
+| Person 1 / A — interaction & timer | [`docs/PERSON-A-AGENT-BRIEF.md`](docs/PERSON-A-AGENT-BRIEF.md) |
+| Person 2 / B — blocking engine | [`docs/PERSON-B-AGENT-BRIEF.md`](docs/PERSON-B-AGENT-BRIEF.md) |
+| Person 3 / C — integrations | [`docs/PERSON-C-AGENT-BRIEF.md`](docs/PERSON-C-AGENT-BRIEF.md) |
+
+Each brief is self-contained: constraints, file ownership, the cross-person
+contract, ordered tasks with acceptance criteria, `adb` verification commands, and
+a failure-mode table. Hand one to an agent with: *"Read this file in full, then
+execute the tasks in section 7 in order."*
 
 ### Person 1 (Person A) — Interaction & timer
 ```
