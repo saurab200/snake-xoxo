@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import {Focus, Overlay} from '../native';
 import {isSnakePeeking, setSnakePeeking} from '../state/bootstrap';
+import {useGamification} from '../state/gamificationStore';
 import {Storage} from '../state/storage';
 import {formatRemaining, useFocusSession} from '../state/useFocusSession';
 
@@ -45,12 +46,67 @@ const COIL_BOX = 110;
 
 type Segment = {
   size: number;
-  color: string;
   coilX: number;
   coilY: number;
   /** 0 at the head, 1 at the tail. */
   t: number;
 };
+
+/* ---- skin palette -------------------------------------------------------
+ * GAMIFICATION, colour only.
+ *
+ * The geometry above is untouched: the unlocked skin only re-tints the snake.
+ * One base colour is expanded into the three shades the snake has always used
+ * (dark head, lightening body, darker rim), so any skin reads as the same snake.
+ */
+
+type Palette = {
+  head: string;
+  border: string;
+  /** Body colour at t (0 = behind the head, 1 = tail tip). */
+  body: (t: number) => string;
+  /** Bright accent for the peeking tail tip and the pills. */
+  accent: string;
+};
+
+/** The snake's original green, used whenever a skin colour is unparseable. */
+const FALLBACK_RGB = {r: 34, g: 197, b: 94};
+
+function hexToRgb(hex: string): {r: number; g: number; b: number} {
+  const clean = hex.replace('#', '');
+  const full =
+    clean.length === 3
+      ? clean
+          .split('')
+          .map(c => c + c)
+          .join('')
+      : clean;
+
+  if (full.length !== 6) {
+    return FALLBACK_RGB;
+  }
+
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+
+  return isNaN(r) || isNaN(g) || isNaN(b) ? FALLBACK_RGB : {r, g, b};
+}
+
+function shade(hex: string, factor: number, toward: 0 | 255): string {
+  const {r, g, b} = hexToRgb(hex);
+  const mix = (c: number) => Math.round(c + (toward - c) * factor);
+  return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+}
+
+function buildPalette(base: string): Palette {
+  return {
+    head: shade(base, 0.45, 0),
+    border: shade(base, 0.58, 0),
+    accent: base,
+    body: (t: number) => shade(base, t * 0.28, 255),
+  };
+}
 
 /** Walk the spiral outward from the head until it reaches MAX_RADIUS. */
 function buildSpiral(): Segment[] {
@@ -87,13 +143,6 @@ function buildSpiral(): Segment[] {
     return {
       t,
       size: HEAD_SIZE - (HEAD_SIZE - TAIL_SIZE) * t,
-      // Head is deepest green, body lightens toward the tail.
-      color:
-        i === 0
-          ? '#166534'
-          : `rgb(${Math.round(34 + t * 70)}, ${Math.round(
-              180 - t * 10,
-            )}, ${Math.round(84 + t * 50)})`,
       coilX: p.x,
       coilY: p.y,
     };
@@ -170,6 +219,8 @@ function minutesFor(dragDp: number): number {
 
 type SnakeBodyProps = {
   dragY: Animated.Value;
+  /** Active skin's base colour. A plain string, so React.memo still holds. */
+  skinColor: string;
 };
 
 /**
@@ -181,7 +232,13 @@ type SnakeBodyProps = {
  * being reconciled ~10 times per drag and once per second during a session,
  * rebuilding 31 views and 62 interpolation nodes each time for no visual gain.
  */
-const SnakeBody = React.memo(function SnakeBody({dragY}: SnakeBodyProps) {
+const SnakeBody = React.memo(function SnakeBody({
+  dragY,
+  skinColor,
+}: SnakeBodyProps) {
+  // Derived once per skin change, not per render.
+  const palette = useMemo(() => buildPalette(skinColor), [skinColor]);
+
   return (
     <>
       {SEGMENT_DATA.map((seg, i) => {
@@ -209,7 +266,8 @@ const SnakeBody = React.memo(function SnakeBody({dragY}: SnakeBodyProps) {
                 width: seg.size,
                 height: seg.size,
                 borderRadius: seg.size / 2,
-                backgroundColor: seg.color,
+                backgroundColor: isHead ? palette.head : palette.body(seg.t),
+                borderColor: palette.border,
                 marginLeft: -seg.size / 2,
                 marginTop: -seg.size / 2,
                 zIndex: SEGMENTS - i,
@@ -253,6 +311,15 @@ const DurationReadout = React.memo(function DurationReadout({
  */
 export default function SnakeOverlay() {
   const session = useFocusSession();
+  /**
+   * GAMIFICATION: read through the module-level store, NOT React context. This
+   * overlay is its own React root mounted by OverlayManager, so it shares no
+   * provider tree with App.tsx -- but it does share this JS module.
+   */
+  const {activeSkinColor} = useGamification();
+  const palette = useMemo(() => buildPalette(activeSkinColor), [
+    activeSkinColor,
+  ]);
 
   // Animated.Value, NOT state: driving this from setState re-rendered the whole
   // tree 60x/second and visibly stuttered during the one moment that matters.
@@ -409,7 +476,7 @@ export default function SnakeOverlay() {
 
   const coiled = (
     <View style={styles.coil} pointerEvents="box-none">
-      <SnakeBody dragY={dragY} />
+      <SnakeBody dragY={dragY} skinColor={activeSkinColor} />
       {dragging ? <DurationReadout minutes={minutes} /> : null}
     </View>
   );
@@ -436,8 +503,24 @@ export default function SnakeOverlay() {
           style={peeking ? styles.peekGrab : styles.coilGrab}>
           {peeking ? (
             <>
-              <View style={styles.peekBody} />
-              <View style={styles.peekTip} />
+              <View
+                style={[
+                  styles.peekBody,
+                  {
+                    backgroundColor: palette.accent,
+                    borderColor: palette.border,
+                  },
+                ]}
+              />
+              <View
+                style={[
+                  styles.peekTip,
+                  {
+                    backgroundColor: palette.body(0.6),
+                    borderColor: palette.border,
+                  },
+                ]}
+              />
             </>
           ) : (
             coiled
@@ -458,14 +541,19 @@ export default function SnakeOverlay() {
       <View style={styles.activeCoil}>{coiled}</View>
 
       <TouchableOpacity
-        style={[styles.pill, lockedOut && styles.pillLocked]}
+        style={[
+          styles.pill,
+          // Skin tint; the locked style still wins, it must always read as red.
+          {backgroundColor: palette.head},
+          lockedOut && styles.pillLocked,
+        ]}
         onPress={() => !lockedOut && Focus.stopSession()}>
         <Text style={styles.pillText}>{label}</Text>
         {lockedOut ? <Text style={styles.pillSub}>locked</Text> : null}
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={styles.plusPill}
+        style={[styles.plusPill, {backgroundColor: palette.head}]}
         onPress={() =>
           Overlay.show(
             'ReminderOverlay',

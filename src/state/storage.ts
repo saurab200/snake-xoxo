@@ -13,6 +13,7 @@ const KEYS = {
   blocklist: 'blocklist',
   canvasToken: 'canvas.token',
   canvasHost: 'canvas.host',
+  gamification: 'gamification.state',
 } as const;
 
 export const Storage = {
@@ -33,4 +34,14 @@ export const Storage = {
 
   setCanvasHost: (host: string): Promise<boolean> =>
     TetherStorage.setItem(KEYS.canvasHost, host),
+
+  /**
+   * Gamification snapshot, persisted as a single JSON blob (points + active
+   * skin + credited-session dedup metadata). One key keeps it atomic.
+   */
+  getGamification: (): Promise<string | null> =>
+    TetherStorage.getItem(KEYS.gamification),
+
+  setGamification: (json: string): Promise<boolean> =>
+    TetherStorage.setItem(KEYS.gamification, json),
 };

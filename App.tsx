@@ -10,13 +10,15 @@ import {
 import BlocklistScreen from './src/screens/BlocklistScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import IntegrationsScreen from './src/screens/IntegrationsScreen';
+import LeaderboardScreen from './src/screens/LeaderboardScreen';
 
-type Tab = 'home' | 'blocklist' | 'integrations';
+type Tab = 'home' | 'blocklist' | 'integrations' | 'leaderboard';
 
 const TABS: {id: Tab; label: string}[] = [
   {id: 'home', label: 'Focus'},
   {id: 'blocklist', label: 'Blocked'},
   {id: 'integrations', label: 'Apps'},
+  {id: 'leaderboard', label: 'Rank'},
 ];
 
 export default function App() {
@@ -30,6 +32,7 @@ export default function App() {
         {tab === 'home' ? <HomeScreen /> : null}
         {tab === 'blocklist' ? <BlocklistScreen /> : null}
         {tab === 'integrations' ? <IntegrationsScreen /> : null}
+        {tab === 'leaderboard' ? <LeaderboardScreen /> : null}
       </View>
 
       <View style={styles.tabBar}>
