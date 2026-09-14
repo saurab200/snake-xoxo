@@ -137,9 +137,9 @@ If you are handing your slice to an AI coding agent, give it the matching brief 
 [`docs/`](docs/) — it contains the full contract, task list, verification commands and
 failure modes.
 
-- Person A → [`docs/PERSON-A-AGENT-BRIEF.md`](docs/PERSON-A-AGENT-BRIEF.md)
+- Person 1 / Person A → [`docs/PERSON-A-AGENT-BRIEF.md`](docs/PERSON-A-AGENT-BRIEF.md)
 
-### Person A — Interaction & timer
+### Person 1 (Person A) — Interaction & timer
 ```
 src/overlays/SnakeOverlay.tsx                          drag -> duration, the demo hook
 android/.../core/TetherService.kt                      foreground service + countdown
@@ -151,7 +151,7 @@ Tuning knobs are at the top of `SnakeOverlay.tsx`: `MINUTES_PER_DP`, `MIN_MINUTE
 
 **Produces:** `FocusSession.isActive` + duration.
 
-### Person B — Blocking engine
+### Person 2 (Person B) — Blocking engine
 ```
 android/.../blocking/TetherAccessibilityService.kt      foreground app detection
 android/.../blocking/AppList.kt                         installed apps + defaults
@@ -162,7 +162,7 @@ src/screens/BlocklistScreen.tsx                         pick which apps to block
 **Consumes:** `FocusSessionStore.isActive`.
 **Produces:** `tether:foregroundApp` events.
 
-### Person C — Integrations
+### Person 3 (Person C) — Integrations
 ```
 src/integrations/types.ts                               plugin interface
 src/integrations/registry.ts                            add integrations here

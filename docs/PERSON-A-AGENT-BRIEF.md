@@ -1,8 +1,12 @@
-# Agent Brief — Person A: Interaction & Timer
+# Agent Brief — Person 1 (Person A): Interaction & Timer
 
-You are implementing **Person A's slice** of Tether, an Android focus app. The
-repository already contains a working skeleton. Your job is to finish and polish
-one vertical slice of it, not to build the app from scratch.
+You are implementing the slice owned by **Person 1**, referred to throughout this
+repository as **Person A**. Both names mean the same person: the code comments and
+the README say "Person A", the team says "Person 1".
+
+The project is Tether, an Android focus app. The repository already contains a
+working skeleton — your job is to finish and polish one vertical slice of it, not
+to build the app from scratch.
 
 Read this entire document before writing code.
 
@@ -17,8 +21,9 @@ sits on top of every other app. Drag distance sets the timer length.
 **That drag is the demo.** It is the only thing judges will remember. Your slice
 owns it end to end: the gesture, the visual, the countdown, and the notification.
 
-Two other people own blocking (Person B) and integrations (Person C). Their code
-already exists and works. You must not modify it.
+The other two slices belong to **Person 2 (Person B)** — blocking — and
+**Person 3 (Person C)** — integrations. Their code already exists and works. You
+must not modify it.
 
 ---
 
