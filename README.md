@@ -8,6 +8,9 @@ the corner.
 
 ---
 
+> **Picking this up cold?** Read [HANDOFF.md](HANDOFF.md) first — what works,
+> what is quietly broken, and which decisions not to undo.
+
 ## Read this first: why there is Kotlin in a React Native project
 
 React Native **cannot** do the two things this app is built around:
