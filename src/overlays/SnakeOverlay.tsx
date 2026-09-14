@@ -1,4 +1,4 @@
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Animated,
   PanResponder,
@@ -20,8 +20,8 @@ const SNAP_MINUTES = 5;
 const MAX_DRAG_DP = 340;
 const COMMIT_THRESHOLD_DP = 20;
 
-const HEAD_SIZE = 26;
-const TAIL_SIZE = 7;
+const HEAD_SIZE = 19;
+const TAIL_SIZE = 5;
 
 /**
  * Spiral geometry -- two competing constraints:
@@ -35,11 +35,11 @@ const TAIL_SIZE = 7;
  * instead -- dTheta = arcStep / radius -- which keeps body spacing even, and let
  * the radius grow fast enough that neighbouring turns stay clear.
  */
-const ARC_STEP = 10; // dp between segment centres, < body width => continuous
-const GROWTH_PER_RADIAN = 4.1; // => ~25dp between turns, > body width => separated
-const START_RADIUS = 12;
-const MAX_RADIUS = 58;
-const COIL_BOX = 170;
+const ARC_STEP = 7; // dp between segment centres, < body width => continuous
+const GROWTH_PER_RADIAN = 3.1; // => ~19dp between turns, > body width => separated
+const START_RADIUS = 8;
+const MAX_RADIUS = 38;
+const COIL_BOX = 110;
 
 type Segment = {
   size: number;
@@ -52,16 +52,32 @@ type Segment = {
 
 /** Walk the spiral outward from the head until it reaches MAX_RADIUS. */
 function buildSpiral(): Segment[] {
-  const points: {x: number; y: number}[] = [];
+  const polar: {r: number; theta: number}[] = [];
   let theta = 0;
   let radius = START_RADIUS;
 
-  while (radius < MAX_RADIUS && points.length < 60) {
-    points.push({x: radius * Math.cos(theta), y: radius * Math.sin(theta)});
+  while (radius < MAX_RADIUS && polar.length < 60) {
+    polar.push({r: radius, theta});
     const dTheta = ARC_STEP / radius;
     theta += dTheta;
     radius += GROWTH_PER_RADIAN * dTheta;
   }
+
+  /**
+   * Rotate the whole spiral so the TAIL ends up directly below the head.
+   *
+   * Without this the spiral winds out to the top of the coil, so the grab point
+   * sat above the head and you had to drag down past it -- backwards, given the
+   * gesture is "pull the tail down". Screen y grows downward, so putting the
+   * last point at +PI/2 puts the tail at the bottom.
+   */
+  const lastTheta = polar[polar.length - 1].theta;
+  const rotation = Math.PI / 2 - lastTheta;
+
+  const points = polar.map(({r, theta: t}) => ({
+    x: r * Math.cos(t + rotation),
+    y: r * Math.sin(t + rotation),
+  }));
 
   const n = points.length;
   return points.map((p, i) => {
@@ -88,8 +104,8 @@ const SEGMENTS = SEGMENT_DATA.length;
 
 /** Idle: a coiled snake, small enough not to punch a hole in the app below. */
 export const SNAKE_LAYOUT = {
-  width: 180,
-  height: 160,
+  width: 120,
+  height: 110,
   gravity: 'top' as const,
   touchThrough: true,
   focusable: false,
@@ -97,8 +113,8 @@ export const SNAKE_LAYOUT = {
 
 /** Grown while dragging so a full pull is not clipped by the window. */
 export const SNAKE_LAYOUT_DRAGGING = {
-  width: 220,
-  height: 460,
+  width: 170,
+  height: 440,
   gravity: 'top' as const,
   touchThrough: true,
   focusable: false,
@@ -201,15 +217,28 @@ export default function SnakeOverlay() {
       friction: 11,
     }).start(() => {
       grown.current = false;
-      // Session state decides which resting layout we return to.
-      Overlay.setLayout(
-        'SnakeOverlay',
-        session.isActive || session.isLockedOut
-          ? SNAKE_LAYOUT_ACTIVE
-          : SNAKE_LAYOUT,
-      ).catch(() => {});
     });
   }
+
+  /**
+   * The resting window size is driven from session state, NOT decided inside
+   * recoil().
+   *
+   * It used to be set in the spring's completion callback, which closes over the
+   * session value from the render that created it. On release that value is
+   * still "idle" -- startSession() has not resolved yet -- so the window snapped
+   * back to the narrow idle width and clipped the + pill off the right edge.
+   */
+  const resting = session.isActive || session.isLockedOut;
+  useEffect(() => {
+    if (dragging) {
+      return; // the drag layout owns the window while a pull is in progress
+    }
+    Overlay.setLayout(
+      'SnakeOverlay',
+      resting ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT,
+    ).catch(() => {});
+  }, [resting, dragging]);
 
   const coiled = (
     <View style={styles.coil} pointerEvents="box-none">
@@ -319,11 +348,11 @@ export default function SnakeOverlay() {
 
 const styles = StyleSheet.create({
   root: {flex: 1, alignItems: 'center', justifyContent: 'flex-start'},
-  coil: {width: COIL_BOX, height: 150, marginTop: 8},
+  coil: {width: COIL_BOX, height: 100, marginTop: 6},
   segment: {
     position: 'absolute',
     left: '50%',
-    top: 66,
+    top: 44,
     alignItems: 'center',
     justifyContent: 'center',
     // A darker rim separates overlapping coils so the spiral stays readable.
@@ -334,8 +363,8 @@ const styles = StyleSheet.create({
   eye: {width: 5, height: 5, borderRadius: 3, backgroundColor: '#f0fdf4'},
   readout: {
     position: 'absolute',
-    left: 112,
-    top: 48,
+    left: 74,
+    top: 30,
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 3,
@@ -355,7 +384,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 4,
   },
-  activeCoil: {width: 60, height: 58, transform: [{scale: 0.36}]},
+  activeCoil: {width: 52, height: 50, transform: [{scale: 0.48}]},
   pill: {
     backgroundColor: '#16a34a',
     paddingHorizontal: 16,
