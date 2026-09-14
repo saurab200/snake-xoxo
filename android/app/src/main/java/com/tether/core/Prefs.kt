@@ -12,6 +12,8 @@ object Prefs {
     private const val FILE = "tether"
 
     const val KEY_BLOCKLIST = "blocklist"
+    /** Whether the snake should be on screen. Cleared by the kill switch. */
+    const val KEY_ARMED = "armed"
     const val KEY_SESSION_END_AT = "session.endAt"
     const val KEY_SESSION_DURATION = "session.duration"
     const val KEY_CANVAS_TOKEN = "canvas.token"
@@ -50,6 +52,14 @@ object Prefs {
             FocusSessionStore.blocklist = getStringSet(context, KEY_BLOCKLIST)
         }
         restoreSession(context)
+    }
+
+    /** Default true: a fresh install should show the snake once permitted. */
+    fun isArmed(context: Context): Boolean =
+        getString(context, KEY_ARMED) != "0"
+
+    fun setArmed(context: Context, armed: Boolean) {
+        setString(context, KEY_ARMED, if (armed) "1" else "0")
     }
 
     /** Called when a session starts, so it can outlive the process. */

@@ -4,6 +4,7 @@ import {KILL_LAYOUT} from '../overlays/KillSwitchOverlay';
 import {
   SNAKE_LAYOUT,
   SNAKE_LAYOUT_ACTIVE,
+  SNAKE_LAYOUT_PEEK,
 } from '../overlays/SnakeOverlay';
 
 /**
@@ -17,6 +18,25 @@ import {
 
 let started = false;
 
+/**
+ * Whether the snake has retreated to the bezel.
+ *
+ * Module scope, NOT component state: the overlay is unmounted every time the
+ * user opens Tether (it would otherwise cover the app's own UI) and remounted
+ * when they leave. Anything kept inside the component is destroyed on every
+ * one of those trips, which reset the peek state and restarted the idle clock
+ * from zero.
+ */
+let snakePeeking = false;
+
+export function setSnakePeeking(value: boolean): void {
+  snakePeeking = value;
+}
+
+export function isSnakePeeking(): boolean {
+  return snakePeeking;
+}
+
 async function showSnake() {
   try {
     const {overlay} = await Permissions.getStatus();
@@ -27,10 +47,13 @@ async function showSnake() {
     await Focus.arm();
 
     const {isActive} = await Focus.getState();
-    await Overlay.show(
-      'SnakeOverlay',
-      isActive ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT,
-    );
+    const layout = isActive
+      ? SNAKE_LAYOUT_ACTIVE
+      : snakePeeking
+      ? SNAKE_LAYOUT_PEEK
+      : SNAKE_LAYOUT;
+
+    await Overlay.show('SnakeOverlay', layout, {peeking: snakePeeking});
     // The panic button travels with the snake -- it has to be reachable in
     // exactly the situations where the snake is visible.
     await Overlay.show('KillSwitchOverlay', KILL_LAYOUT);

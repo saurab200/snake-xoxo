@@ -13,6 +13,9 @@
     <!-- Session-end feedback. Normal permission: granted at install, no prompt. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Bring the snake back after a reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!--
       Android 11+ hides the installed-app list unless you declare what you want to see.
       This <queries> block is what makes the blocklist settings screen non-empty.
@@ -55,6 +58,16 @@
           android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
           android:value="Focus session timer and floating focus controls" />
       </service>
+
+      <receiver
+        android:name=".core.BootReceiver"
+        android:exported="true"
+        android:directBootAware="true">
+        <intent-filter>
+            <action android:name="android.intent.action.BOOT_COMPLETED" />
+            <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+        </intent-filter>
+      </receiver>
 
       <!--
         Device Owner receiver. Provisioned once over adb:

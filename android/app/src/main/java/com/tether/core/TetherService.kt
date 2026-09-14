@@ -157,6 +157,9 @@ class TetherService : Service() {
             else -> {
                 // Restores a session that was running when the process died.
                 Prefs.hydrate(this)
+                // On a boot start there is no activity, so nothing else would
+                // load the JS bundle -- and the snake lives in JS.
+                RNBridge.ensureContext(this)
                 // force: reconcile whatever the last process left behind.
                 AppHider.sync(this, force = true)
                 createChannels()

@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {
   AppState,
+  DeviceEventEmitter,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,8 +16,9 @@ import {
   Permissions,
   RemindersApi,
 } from '../native';
+import {PEEK_NOW_EVENT} from '../overlays/SnakeOverlay';
 import {WIDGET_LAYOUT} from '../overlays/WidgetOverlay';
-import {rearm, startSnake} from '../state/bootstrap';
+import {rearm, setSnakePeeking, startSnake} from '../state/bootstrap';
 import {Storage} from '../state/storage';
 import {formatRemaining, useFocusSession} from '../state/useFocusSession';
 
@@ -189,6 +191,20 @@ export default function HomeScreen() {
           onPress={() => RemindersApi.stopLockout()}
           muted
         />
+        <Button
+          label="Send snake to the bezel"
+          onPress={() => {
+            // The overlay is unmounted right now (Tether is foreground), so
+            // set the module flag; it is applied when the snake reappears.
+            setSnakePeeking(true);
+            DeviceEventEmitter.emit(PEEK_NOW_EVENT);
+          }}
+          muted
+        />
+        <Text style={styles.hint}>
+          Then press Home. Normally this happens on its own after 10 idle
+          minutes.
+        </Text>
         <Button label="Hide all overlays" onPress={Overlay.hideAll} muted />
       </Section>
     </ScrollView>

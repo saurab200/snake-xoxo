@@ -1,6 +1,7 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Animated,
+  DeviceEventEmitter,
   PanResponder,
   StyleSheet,
   Text,
@@ -9,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import {Focus, Overlay} from '../native';
+import {isSnakePeeking, setSnakePeeking} from '../state/bootstrap';
 import {Storage} from '../state/storage';
 import {formatRemaining, useFocusSession} from '../state/useFocusSession';
 
@@ -111,6 +113,36 @@ export const SNAKE_LAYOUT = {
   focusable: false,
 };
 
+/**
+ * Peek: the snake has retreated up behind the bezel and only the tip of its
+ * tail is showing. Small enough to be ignorable, big enough to grab.
+ */
+export const SNAKE_LAYOUT_PEEK = {
+  width: 64,
+  height: 34,
+  /**
+   * Offset clear of the status bar.
+   *
+   * The status bar is ~24dp of TYPE_STATUS_BAR, which sits ABOVE application
+   * overlays in z-order and swallows touches for the shade pull-down. At y=0
+   * the tail was drawn correctly but was completely untappable -- the system
+   * took every touch before it reached us.
+   */
+  y: 26,
+  gravity: 'top' as const,
+  touchThrough: true,
+  focusable: false,
+};
+
+/** Idle this long with no session and no touch, and the snake goes to peek. */
+const IDLE_HIDE_MS = 10 * 60 * 1000;
+
+/**
+ * Force the snake to the bezel immediately, without waiting out the idle
+ * timer. Used by the dev panel, and handy for demoing the peek state.
+ */
+export const PEEK_NOW_EVENT = 'tether:peekNow';
+
 /** Grown while dragging so a full pull is not clipped by the window. */
 export const SNAKE_LAYOUT_DRAGGING = {
   width: 170,
@@ -138,7 +170,6 @@ function minutesFor(dragDp: number): number {
 
 type SnakeBodyProps = {
   dragY: Animated.Value;
-  panHandlers: ReturnType<typeof PanResponder.create>['panHandlers'];
 };
 
 /**
@@ -150,19 +181,12 @@ type SnakeBodyProps = {
  * being reconciled ~10 times per drag and once per second during a session,
  * rebuilding 31 views and 62 interpolation nodes each time for no visual gain.
  */
-const SnakeBody = React.memo(function SnakeBody({
-  dragY,
-  panHandlers,
-}: SnakeBodyProps) {
+const SnakeBody = React.memo(function SnakeBody({dragY}: SnakeBodyProps) {
   return (
     <>
       {SEGMENT_DATA.map((seg, i) => {
         // The tail starts moving first, so outer segments lead the uncoil.
         const startAt = ((SEGMENTS - 1 - i) / SEGMENTS) * 90;
-        // The whole tail region is draggable, not a single 5dp dot -- both
-        // because that is a usable touch target and because "grab the tail" is
-        // what the gesture is supposed to feel like.
-        const isTail = i >= SEGMENTS - 7;
         const isHead = i === 0;
 
         const translateX = dragY.interpolate({
@@ -179,7 +203,6 @@ const SnakeBody = React.memo(function SnakeBody({
         return (
           <Animated.View
             key={i}
-            {...(isTail ? panHandlers : {})}
             style={[
               styles.segment,
               {
@@ -241,6 +264,21 @@ export default function SnakeOverlay() {
 
   const [minutes, setMinutes] = useState(0);
   const [dragging, setDragging] = useState(false);
+  /**
+   * Seeded by READING module scope, not from an initial prop.
+   *
+   * Props go native -> Bundle -> JS on mount, which is an extra hop that can
+   * arrive empty; the module variable is simply there. Same bundle, same JS
+   * context, so it is always current.
+   */
+  const [peeking, setPeekingState] = useState(() => isSnakePeeking());
+
+  // Keep the module-scope copy in step so the state survives a remount.
+  const setPeeking = (value: boolean) => {
+    setSnakePeeking(value);
+    setPeekingState(value);
+  };
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pan = useMemo(
     () =>
@@ -249,6 +287,7 @@ export default function SnakeOverlay() {
         onMoveShouldSetPanResponder: () => !session.isActive,
 
         onPanResponderGrant: () => {
+          wake();
           setDragging(true);
           if (!grown.current) {
             grown.current = true;
@@ -315,28 +354,95 @@ export default function SnakeOverlay() {
    * back to the narrow idle width and clipped the + pill off the right edge.
    */
   const resting = session.isActive || session.isLockedOut;
+
+  /** Any interaction brings the snake back out and restarts the idle clock. */
+  function wake() {
+    setPeeking(false);
+    if (idleTimer.current) {
+      clearTimeout(idleTimer.current);
+      idleTimer.current = null;
+    }
+  }
+
+  // The snake stays fully visible for the whole of an operation, and only
+  // retreats to the bezel after a long stretch of doing nothing.
+  useEffect(() => {
+    if (idleTimer.current) {
+      clearTimeout(idleTimer.current);
+      idleTimer.current = null;
+    }
+    if (resting || dragging) {
+      setPeeking(false);
+      return;
+    }
+    idleTimer.current = setTimeout(() => setPeeking(true), IDLE_HIDE_MS);
+    return () => {
+      if (idleTimer.current) {
+        clearTimeout(idleTimer.current);
+      }
+    };
+  }, [resting, dragging]);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(PEEK_NOW_EVENT, () => {
+      if (!resting) {
+        setPeeking(true);
+      }
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resting]);
+
   useEffect(() => {
     if (dragging) {
       return; // the drag layout owns the window while a pull is in progress
     }
     Overlay.setLayout(
       'SnakeOverlay',
-      resting ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT,
+      resting
+        ? SNAKE_LAYOUT_ACTIVE
+        : peeking
+        ? SNAKE_LAYOUT_PEEK
+        : SNAKE_LAYOUT,
     ).catch(() => {});
-  }, [resting, dragging]);
+  }, [resting, dragging, peeking]);
 
   const coiled = (
     <View style={styles.coil} pointerEvents="box-none">
-      <SnakeBody dragY={dragY} panHandlers={pan.panHandlers} />
+      <SnakeBody dragY={dragY} />
       {dragging ? <DurationReadout minutes={minutes} /> : null}
     </View>
   );
 
-  // --- resting, no session -------------------------------------------------
-  if (!session.isActive && !session.isLockedOut) {
+  /**
+   * Peek and idle share ONE gesture host that is never unmounted.
+   *
+   * They used to be separate early-returns, so waking from peek swapped the
+   * render branch mid-gesture and destroyed the very view holding the
+   * responder. React Native then fired onPanResponderTerminate and cancelled
+   * the pull: the snake came out, but no session ever started.
+   *
+   * The gesture also lives on the host rather than the tail segments now. At
+   * this size the whole snake is barely a thumb wide, so restricting the grab
+   * to the tail bought nothing and made the target needlessly fussy.
+   */
+  if (!resting) {
     return (
-      <View style={styles.root} pointerEvents="box-none">
-        {coiled}
+      <View
+        style={peeking ? styles.peekRoot : styles.root}
+        pointerEvents="box-none">
+        <View
+          {...pan.panHandlers}
+          style={peeking ? styles.peekGrab : styles.coilGrab}>
+          {peeking ? (
+            <>
+              <View style={styles.peekBody} />
+              <View style={styles.peekTip} />
+            </>
+          ) : (
+            coiled
+          )}
+        </View>
       </View>
     );
   }
@@ -409,6 +515,36 @@ const styles = StyleSheet.create({
   readoutValue: {color: '#4ade80', fontWeight: '800', fontSize: 20},
   readoutUnit: {color: '#86efac', fontWeight: '600', fontSize: 11},
 
+  peekRoot: {flex: 1, alignItems: 'center'},
+  /** Gesture host in the coil state; sized to the coil so it catches the body. */
+  coilGrab: {width: COIL_BOX, height: 150, alignItems: 'center'},
+  /** Generous hit area; the visible part is deliberately tiny. */
+  peekGrab: {
+    width: 64,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  // Reads as a body disappearing up behind the bezel, tapering to a tip.
+  peekBody: {
+    width: 22,
+    height: 15,
+    borderBottomLeftRadius: 11,
+    borderBottomRightRadius: 11,
+    backgroundColor: '#22c55e',
+    borderWidth: 1.5,
+    borderTopWidth: 0,
+    borderColor: '#14532d',
+  },
+  peekTip: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#4ade80',
+    borderWidth: 1,
+    borderColor: '#14532d',
+    marginTop: 1,
+  },
   activeRow: {
     flex: 1,
     flexDirection: 'row',
