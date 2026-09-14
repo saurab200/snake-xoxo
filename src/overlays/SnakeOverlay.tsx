@@ -123,7 +123,7 @@ export const SNAKE_LAYOUT_DRAGGING = {
 /** Active: coiled snake plus the timer and add-reminder pills beside it. */
 export const SNAKE_LAYOUT_ACTIVE = {
   width: 320,
-  height: 80,
+  height: 104,
   gravity: 'top' as const,
   touchThrough: true,
   focusable: false,
@@ -384,7 +384,21 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 4,
   },
-  activeCoil: {width: 52, height: 50, transform: [{scale: 0.48}]},
+  /**
+   * Must be the coil's REAL box (COIL_BOX x 100), not the size it appears at
+   * after scaling. A smaller wrapper does not crop the coil -- it overflows it,
+   * and the overlay window then clips the snake's lower body off.
+   *
+   * `transform: scale` does not shrink the layout box, so the negative side
+   * margins claw back the empty space the scale leaves, keeping the row tight.
+   */
+  activeCoil: {
+    width: COIL_BOX,
+    height: 100,
+    transform: [{scale: 0.5}],
+    marginLeft: -26,
+    marginRight: -26,
+  },
   pill: {
     backgroundColor: '#16a34a',
     paddingHorizontal: 16,
