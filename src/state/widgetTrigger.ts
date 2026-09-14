@@ -1,6 +1,13 @@
 import {Focus, Overlay, TetherEvents} from '../native';
 import {integrationForPackage, syncTriggerPackages} from '../integrations/registry';
+import {TASK_CARD_LAYOUT} from '../overlays/TaskCardOverlay';
 import {WIDGET_LAYOUT} from '../overlays/WidgetOverlay';
+
+/**
+ * Long enough for the snake to finish its coil-and-crawl before the task card
+ * slides in, so the two animations do not fight for attention.
+ */
+const CARD_DELAY_MS = 3800;
 
 /**
  * THE PERSON 2 -> PERSON 3 SEAM.
@@ -65,10 +72,28 @@ export function startWidgetTrigger(): void {
     }
   });
 
-  // Take the widget down when the session ends.
+  /**
+   * Starting a session raises the obvious question -- focus on WHAT? -- so the
+   * task card answers it, once the snake has finished crawling home.
+   */
+  let cardTimer: ReturnType<typeof setTimeout> | null = null;
+
   TetherEvents.onSessionChanged(state => {
-    if (!state.isActive) {
-      Overlay.hide('WidgetOverlay').catch(() => {});
+    if (cardTimer) {
+      clearTimeout(cardTimer);
+      cardTimer = null;
     }
+
+    if (state.isActive) {
+      cardTimer = setTimeout(() => {
+        Overlay.show('TaskCardOverlay', TASK_CARD_LAYOUT, {
+          nonce: Date.now(),
+        }).catch(() => {});
+      }, CARD_DELAY_MS);
+      return;
+    }
+
+    Overlay.hide('WidgetOverlay').catch(() => {});
+    Overlay.hide('TaskCardOverlay').catch(() => {});
   });
 }

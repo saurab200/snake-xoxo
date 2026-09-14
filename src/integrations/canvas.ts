@@ -13,7 +13,7 @@ import {ProductivityIntegration, TodoItem, WidgetPayload} from './types';
  */
 
 const TIMEOUT_MS = 8000;
-const MAX_ITEMS = 6;
+const MAX_ITEMS = 25;
 
 export const CanvasIntegration: ProductivityIntegration = {
   id: 'canvas',
@@ -97,6 +97,7 @@ type CanvasTodo = {
     id: number;
     name: string;
     due_at: string | null;
+    points_possible?: number;
     html_url?: string;
   };
   context_name?: string;
@@ -105,24 +106,14 @@ type CanvasTodo = {
 
 function toTodoItem(todo: CanvasTodo, index: number): TodoItem {
   const assignment = todo.assignment;
+  const due = assignment?.due_at ? Date.parse(assignment.due_at) : undefined;
   return {
     id: String(assignment?.id ?? index),
     title: assignment?.name ?? 'Untitled',
-    subtitle: [todo.context_name, formatDue(assignment?.due_at)]
-      .filter(Boolean)
-      .join(' · '),
+    context: todo.context_name,
+    dueAtMs: Number.isNaN(due) ? undefined : due,
+    points: assignment?.points_possible,
     url: assignment?.html_url ?? todo.html_url,
+    source: 'integration',
   };
-}
-
-function formatDue(dueAt?: string | null): string | undefined {
-  if (!dueAt) {
-    return undefined;
-  }
-  const date = new Date(dueAt);
-  return `Due ${date.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  })}`;
 }

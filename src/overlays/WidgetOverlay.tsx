@@ -157,9 +157,9 @@ export default function WidgetOverlay({integrationId = 'canvas'}: Props) {
                 <Text style={styles.itemTitle} numberOfLines={2}>
                   {item.title}
                 </Text>
-                {item.subtitle ? (
+                {item.context ? (
                   <Text style={styles.itemSub} numberOfLines={1}>
-                    {item.subtitle}
+                    {item.context}
                   </Text>
                 ) : null}
               </View>

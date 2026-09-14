@@ -24,9 +24,9 @@ export const StreakIntegration: ProductivityIntegration = {
     return {
       type: 'todoList',
       items: [
-        {id: 'streak', title: 'Focus streak', subtitle: '3 days'},
-        {id: 'today', title: 'Focused today', subtitle: '1h 15m'},
-        {id: 'blocked', title: 'Distractions blocked', subtitle: '7 attempts'},
+        {id: 'streak', title: 'Focus streak', context: '3 days'},
+        {id: 'today', title: 'Focused today', context: '1h 15m'},
+        {id: 'blocked', title: 'Distractions blocked', context: '7 attempts'},
       ],
     };
   },

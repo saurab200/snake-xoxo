@@ -14,6 +14,7 @@ import BlockOverlay from './src/overlays/BlockOverlay';
 import KillSwitchOverlay from './src/overlays/KillSwitchOverlay';
 import ReminderOverlay from './src/overlays/ReminderOverlay';
 import SnakeOverlay from './src/overlays/SnakeOverlay';
+import TaskCardOverlay from './src/overlays/TaskCardOverlay';
 import WidgetOverlay from './src/overlays/WidgetOverlay';
 import {startSnake} from './src/state/bootstrap';
 import {startWidgetTrigger} from './src/state/widgetTrigger';
@@ -25,6 +26,7 @@ AppRegistry.registerComponent('BlockOverlay', () => BlockOverlay);
 AppRegistry.registerComponent('WidgetOverlay', () => WidgetOverlay);
 AppRegistry.registerComponent('ReminderOverlay', () => ReminderOverlay);
 AppRegistry.registerComponent('KillSwitchOverlay', () => KillSwitchOverlay);
+AppRegistry.registerComponent('TaskCardOverlay', () => TaskCardOverlay);
 
 /**
  * Started at module scope, NOT from a React component.

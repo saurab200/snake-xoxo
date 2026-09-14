@@ -56,6 +56,7 @@ export function startSnake(): void {
     if (state === 'active') {
       Overlay.hide('SnakeOverlay').catch(() => {});
       Overlay.hide('KillSwitchOverlay').catch(() => {});
+      Overlay.hide('TaskCardOverlay').catch(() => {});
     } else {
       showSnake();
     }
