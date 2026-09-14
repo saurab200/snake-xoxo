@@ -42,22 +42,59 @@ Kotlin just supplies the window.
 
 ## Setup
 
-Requires JDK 17+, Android SDK 34, and a **physical device** (overlay + accessibility
-permissions are painful on emulators, and the demo is a phone demo).
+The team is split across macOS and Windows. The steps are the same on both; the
+differences are called out below.
+
+**Everyone needs:** Node 18+, JDK 17+, Android Studio (open it once so it downloads
+the SDK), and a **physical Android phone**. Overlay and accessibility permissions are
+miserable on emulators and the demo is a phone demo.
 
 ```bash
+git clone git@github.com:saurab200/snake-xoxo.git tether
+cd tether
 npm install
-echo "sdk.dir=$HOME/Library/Android/sdk" > android/local.properties   # macOS
-# echo "sdk.dir=$HOME/Android/Sdk" > android/local.properties          # Linux
-
-npm start                 # terminal 1: Metro
-npm run android           # terminal 2: build + install
+npm run setup      # writes android/local.properties for YOUR machine
+npm start          # terminal 1: Metro
+npm run android    # terminal 2: build + install
 ```
 
-First launch: open the app and grant the two permissions on the **Focus** tab. Both
-open a system Settings screen — they are not runtime dialogs and cannot be automated.
+`npm run setup` finds your SDK automatically (`~/Library/Android/sdk` on macOS,
+`%LOCALAPPDATA%\Android\Sdk` on Windows) and writes `android/local.properties`.
+That file is gitignored on purpose — it is the one file that must differ per machine.
+Never commit it.
+
+### Clone into a path with no spaces
+
+`~/code/tether` or `C:\dev\tether` — good.
+`~/my projects/tether` or `C:\Users\me\OneDrive\My Stuff\tether` — Gradle breaks
+in confusing ways.
+
+**Windows people:** avoid cloning into a OneDrive- or Dropbox-synced folder. The
+sync client locks files mid-build and Gradle fails with permission errors that look
+like compiler bugs.
+
+### Windows specifics
+
+- Use **PowerShell** or Git Bash, not `cmd.exe`.
+- Your phone needs an OEM USB driver before `adb` will see it. Install Android
+  Studio's "Google USB Driver" (SDK Manager → SDK Tools), plug the phone in with
+  USB debugging on, then confirm with `adb devices` — if it prints `unauthorized`,
+  accept the prompt on the phone screen.
+- If `npm run android` cannot find a JDK, set `JAVA_HOME` to the JDK that ships with
+  Android Studio: `C:\Program Files\Android\Android Studio\jbr`.
+
+### Line endings
+
+`.gitattributes` forces LF in the repo. Do not override it. Without it, Windows
+commits CRLF and `android/gradlew` then fails on macOS with
+`bad interpreter: /bin/sh^M`. If you hit that after a bad merge:
+
+```bash
+git rm --cached -r . && git reset --hard
+```
 
 ---
+
 
 ## The shared contract
 

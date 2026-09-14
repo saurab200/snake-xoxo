@@ -1,0 +1,25 @@
+# Normalise line endings across macOS / Windows / Linux.
+#
+# Without this, Windows checks out CRLF and commits it back, which breaks
+# android/gradlew on macOS with "bad interpreter: /bin/sh^M". Every text file is
+# stored LF in the repo; Windows tooling handles LF fine.
+* text=auto eol=lf
+
+# Windows batch files genuinely require CRLF or cmd.exe misparses them.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.keystore binary
+*.jar binary
+*.so binary
+*.aar binary
