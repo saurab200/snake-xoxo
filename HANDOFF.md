@@ -1,10 +1,10 @@
 # Tether — Handoff
 
-State of the project as of `0afb9c4`. Written for whoever picks this up next.
+State of the project as of `0c439a4`. Written for whoever picks this up next.
 
 Read [README.md](README.md) for setup. This file is what the README cannot tell
-you: what actually works, what is quietly broken, and which decisions you should
-not undo.
+you: what actually works, where the sharp edges are, and which decisions you
+should not undo.
 
 ---
 
@@ -15,7 +15,7 @@ down; how far you pull sets the session length. During a session the apps you
 have blocked **disappear from the launcher entirely**, and a task card shows what
 you should be doing instead.
 
-Android only. React Native 0.75.4 + a Kotlin layer. 24 commits, 20 Kotlin files,
+Android only. React Native 0.75.4 + a Kotlin layer. 26 commits, 20 Kotlin files,
 6 native modules, 6 overlays.
 
 ---
@@ -124,8 +124,8 @@ If you add something that must survive the user leaving the app, put it there.
 
 ## 5. Known limitations — read before demoing
 
-Two kill-switch bugs that used to live here were fixed in `4a1f…`; the detail is
-in §10 because the reasoning is worth keeping.
+Two kill-switch bugs that used to live here were fixed in `0c439a4`; the detail
+is kept in §10 because the shape of both will recur.
 
 ### Vanish mode loses home-screen shortcuts
 
