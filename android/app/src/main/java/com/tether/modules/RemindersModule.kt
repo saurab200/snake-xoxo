@@ -7,6 +7,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
+import com.tether.admin.AppHider
 import com.tether.core.FocusSessionStore
 import com.tether.core.RNBridge
 import com.tether.core.Reminders
@@ -72,6 +73,7 @@ class RemindersModule(private val reactContext: ReactApplicationContext) :
             label ?: "Manual lockout",
         )
         TetherService.start(reactContext)
+        AppHider.sync(reactContext)
         RNBridge.emit(reactContext, TetherEvents.LOCKOUT_CHANGED, lockoutState())
         promise.resolve(true)
     }
@@ -79,6 +81,7 @@ class RemindersModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun stopLockout(promise: Promise) {
         FocusSessionStore.stopLockout()
+        AppHider.sync(reactContext)
         RNBridge.emit(reactContext, TetherEvents.LOCKOUT_CHANGED, lockoutState())
         promise.resolve(true)
     }

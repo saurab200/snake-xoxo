@@ -14,6 +14,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import com.facebook.react.bridge.Arguments
 import com.tether.MainActivity
+import com.tether.admin.AppHider
 import com.tether.overlay.OverlayManager
 
 /**
@@ -66,6 +67,8 @@ class TetherService : Service() {
             // Reminders and lockout run independently of focus sessions.
             checkReminders()
             checkLockoutExpiry()
+            // Cheap: no-ops unless the hide/show state actually changed.
+            AppHider.sync(this@TetherService)
 
             if (FocusSessionStore.isActive) {
                 endHandled = false
@@ -154,6 +157,8 @@ class TetherService : Service() {
             else -> {
                 // Restores a session that was running when the process died.
                 Prefs.hydrate(this)
+                // force: reconcile whatever the last process left behind.
+                AppHider.sync(this, force = true)
                 createChannels()
                 startForeground(NOTIFICATION_ID, buildNotification())
                 startTicking()
@@ -164,6 +169,8 @@ class TetherService : Service() {
 
     override fun onDestroy() {
         stopTicking()
+        // Never leave the user's apps hidden because our service went away.
+        AppHider.restoreAll(this)
         OverlayManager.hideAll(this)
         super.onDestroy()
     }

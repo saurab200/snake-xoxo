@@ -10,6 +10,7 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.facebook.soloader.SoLoader
+import com.tether.admin.AppHider
 import com.tether.core.FocusSessionStore
 import com.tether.core.Prefs
 import com.tether.core.TetherService
@@ -61,6 +62,10 @@ class MainApplication : Application(), ReactApplication {
       Prefs.hydrate(this)
       if (FocusSessionStore.isActive) {
         TetherService.start(this)
+      } else {
+        // Safety net: if we died mid-session the user's apps could still be
+        // hidden with nothing running to bring them back.
+        AppHider.restoreAll(this)
       }
     } catch (e: Exception) {
       // Android 12+ can refuse a background foreground-service start. Not fatal:

@@ -56,6 +56,24 @@
           android:value="Focus session timer and floating focus controls" />
       </service>
 
+      <!--
+        Device Owner receiver. Provisioned once over adb:
+          adb shell dpm set-device-owner com.tether/com.tether.admin.TetherDeviceAdmin
+        Only used for setApplicationHidden(), which makes blocked apps vanish
+        from the launcher instead of being covered by a wall.
+      -->
+      <receiver
+        android:name=".admin.TetherDeviceAdmin"
+        android:permission="android.permission.BIND_DEVICE_ADMIN"
+        android:exported="true">
+        <meta-data
+          android:name="android.app.device_admin"
+          android:resource="@xml/device_admin" />
+        <intent-filter>
+            <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+        </intent-filter>
+      </receiver>
+
       <!-- Person B: foreground-app detection -->
       <service
         android:name=".blocking.TetherAccessibilityService"

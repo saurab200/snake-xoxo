@@ -18,9 +18,17 @@ export default function BlocklistScreen() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [serviceOn, setServiceOn] = useState(true);
+  const [deviceOwner, setDeviceOwner] = useState(false);
+  const [hiddenCount, setHiddenCount] = useState(0);
 
   const recheckService = useCallback(async () => {
     setServiceOn(await Blocking.isAccessibilityEnabled());
+    try {
+      setDeviceOwner(await Blocking.isDeviceOwner());
+      setHiddenCount(await Blocking.getHiddenCount());
+    } catch {
+      /* older build without the device-owner bridge */
+    }
   }, []);
 
   useEffect(() => {
@@ -122,6 +130,39 @@ export default function BlocklistScreen() {
         </TouchableOpacity>
       ) : null}
 
+      {deviceOwner ? (
+        <View style={styles.ownerOn}>
+          <Text style={styles.ownerOnTitle}>Vanish mode active</Text>
+          <Text style={styles.ownerOnBody}>
+            Blocked apps disappear from your launcher during a session. No icon,
+            no dialog, nothing to tap.
+            {hiddenCount > 0 ? ` ${hiddenCount} hidden right now.` : ''}
+          </Text>
+          {hiddenCount > 0 ? (
+            <TouchableOpacity
+              onPress={async () => {
+                await Blocking.restoreHiddenApps();
+                recheckService();
+              }}>
+              <Text style={styles.ownerAction}>Restore all apps now ›</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.ownerOff}>
+          <Text style={styles.ownerOffTitle}>Vanish mode off</Text>
+          <Text style={styles.ownerOffBody}>
+            Blocked apps are covered by a wall instead of disappearing. To make
+            them vanish, run this once with the phone connected — it only works
+            on a device with no Google account signed in:
+          </Text>
+          <Text selectable style={styles.code}>
+            adb shell dpm set-device-owner{'\n'}
+            com.tether/com.tether.admin.TetherDeviceAdmin
+          </Text>
+        </View>
+      )}
+
       <TextInput
         style={styles.search}
         value={query}
@@ -187,6 +228,34 @@ const styles = StyleSheet.create({
   },
   warningTitle: {color: '#f85149', fontWeight: '800', fontSize: 14},
   warningBody: {color: '#e6a1a1', fontSize: 12, marginTop: 4, lineHeight: 17},
+  ownerOn: {
+    backgroundColor: '#052e16',
+    borderWidth: 1,
+    borderColor: '#16a34a',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  ownerOnTitle: {color: '#4ade80', fontWeight: '800', fontSize: 13},
+  ownerOnBody: {color: '#86efac', fontSize: 12, marginTop: 4, lineHeight: 17},
+  ownerAction: {color: '#4ade80', fontSize: 12, fontWeight: '700', marginTop: 8},
+  ownerOff: {
+    backgroundColor: '#161b22',
+    borderWidth: 1,
+    borderColor: '#30363d',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  ownerOffTitle: {color: '#8b949e', fontWeight: '800', fontSize: 13},
+  ownerOffBody: {color: '#6e7681', fontSize: 12, marginTop: 4, lineHeight: 17},
+  code: {
+    color: '#79c0ff',
+    fontSize: 11,
+    fontFamily: 'monospace',
+    marginTop: 8,
+    lineHeight: 16,
+  },
   search: {
     backgroundColor: '#161b22',
     borderWidth: 1,

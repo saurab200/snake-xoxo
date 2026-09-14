@@ -160,6 +160,15 @@ export const Blocking = {
     TetherBlocking.getSuggestedBlocklist(),
   openBatteryOptimizationSettings: (): Promise<boolean> =>
     TetherBlocking.openBatteryOptimizationSettings(),
+
+  /**
+   * Device Owner unlocks the strongest blocking mode: blocked apps vanish from
+   * the launcher entirely instead of being covered by an overlay.
+   */
+  isDeviceOwner: (): Promise<boolean> => TetherBlocking.isDeviceOwner(),
+  getHiddenCount: (): Promise<number> => TetherBlocking.getHiddenCount(),
+  restoreHiddenApps: (): Promise<boolean> =>
+    TetherBlocking.restoreHiddenApps(),
 };
 
 /* ------------------------------------------------------------------ */

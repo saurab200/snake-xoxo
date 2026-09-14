@@ -7,6 +7,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.bridge.WritableMap
+import com.tether.admin.AppHider
 import com.tether.core.FocusSessionStore
 import com.tether.core.Prefs
 import com.tether.core.RNBridge
@@ -43,6 +44,7 @@ class FocusModule(private val reactContext: ReactApplicationContext) :
             FocusSessionStore.durationMinutes,
         )
         TetherService.start(reactContext) // idempotent; guarantees the ticker is running
+        AppHider.sync(reactContext)
         emitSessionChanged()
         promise.resolve(state())
     }
@@ -51,6 +53,7 @@ class FocusModule(private val reactContext: ReactApplicationContext) :
     fun stopSession(promise: Promise) {
         FocusSessionStore.stop()
         Prefs.clearSession(reactContext)
+        AppHider.sync(reactContext)
         emitSessionChanged()
         promise.resolve(state())
     }

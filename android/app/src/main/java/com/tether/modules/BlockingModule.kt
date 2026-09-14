@@ -7,6 +7,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import android.content.Intent
 import android.provider.Settings
+import com.tether.admin.AppHider
 import com.tether.blocking.AppList
 import com.tether.blocking.TetherAccessibilityService
 
@@ -38,6 +39,28 @@ class BlockingModule(private val reactContext: ReactApplicationContext) :
             Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
+        promise.resolve(true)
+    }
+
+    /**
+     * Device Owner unlocks setApplicationHidden(), which makes blocked apps
+     * vanish from the launcher rather than being covered by a wall. Without it
+     * Tether falls back to the block overlay.
+     */
+    @ReactMethod
+    fun isDeviceOwner(promise: Promise) {
+        promise.resolve(AppHider.isDeviceOwner(reactContext))
+    }
+
+    @ReactMethod
+    fun getHiddenCount(promise: Promise) {
+        promise.resolve(AppHider.hiddenCount(reactContext))
+    }
+
+    /** Escape hatch: bring every hidden app back, whatever the session state. */
+    @ReactMethod
+    fun restoreHiddenApps(promise: Promise) {
+        AppHider.restoreAll(reactContext)
         promise.resolve(true)
     }
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <!--
+          Deliberately minimal. Device Owner already grants the one call Tether
+          needs (setApplicationHidden); requesting wipe/lock/password policies
+          would be asking for authority over the device that this app has no
+          business holding.
+        -->
+    </uses-policies>
+</device-admin>
