@@ -12,6 +12,8 @@ object Prefs {
     private const val FILE = "tether"
 
     const val KEY_BLOCKLIST = "blocklist"
+    const val KEY_SESSION_END_AT = "session.endAt"
+    const val KEY_SESSION_DURATION = "session.duration"
     const val KEY_CANVAS_TOKEN = "canvas.token"
     const val KEY_CANVAS_HOST = "canvas.host"
 
@@ -47,5 +49,36 @@ object Prefs {
         if (FocusSessionStore.blocklist.isEmpty()) {
             FocusSessionStore.blocklist = getStringSet(context, KEY_BLOCKLIST)
         }
+        restoreSession(context)
+    }
+
+    /** Called when a session starts, so it can outlive the process. */
+    fun saveSession(context: Context, endAtMs: Long, durationMinutes: Int) {
+        setString(context, KEY_SESSION_END_AT, endAtMs.toString())
+        setString(context, KEY_SESSION_DURATION, durationMinutes.toString())
+    }
+
+    fun clearSession(context: Context) {
+        setString(context, KEY_SESSION_END_AT, "0")
+        setString(context, KEY_SESSION_DURATION, "0")
+    }
+
+    /**
+     * Bring back a session that was running when the process died. Android
+     * restarts the foreground service (START_STICKY) but with empty memory, so
+     * without this the timer silently disappears after an OOM kill or force-stop.
+     */
+    private fun restoreSession(context: Context) {
+        if (FocusSessionStore.isActive) return
+
+        val endAt = getString(context, KEY_SESSION_END_AT)?.toLongOrNull() ?: 0L
+        val minutes = getString(context, KEY_SESSION_DURATION)?.toIntOrNull() ?: 0
+
+        // Never resurrect a session that expired while we were dead.
+        if (endAt <= System.currentTimeMillis()) {
+            if (endAt != 0L) clearSession(context)
+            return
+        }
+        FocusSessionStore.restore(endAt, minutes, getStringSet(context, KEY_BLOCKLIST))
     }
 }

@@ -41,6 +41,22 @@ object FocusSessionStore {
         isActive = true
     }
 
+    /**
+     * Restore a session that was running before the process died.
+     *
+     * Distinct from start() on purpose: start() computes endAtMs from a duration,
+     * which would round the remaining time up on every restore and let a session
+     * drift longer each time the process is killed. This preserves the original
+     * deadline exactly.
+     */
+    fun restore(endAt: Long, minutes: Int, blocked: Set<String>) {
+        if (endAt <= System.currentTimeMillis()) return
+        endAtMs = endAt
+        durationMinutes = minutes
+        blocklist = blocked
+        isActive = true
+    }
+
     fun stop() {
         isActive = false
         endAtMs = 0L

@@ -12,6 +12,42 @@ Read this entire document before writing code.
 
 ---
 
+## STATUS — all six tasks implemented AND verified on a running emulator
+
+| Task | State | Evidence |
+|---|---|---|
+| 1 — drag performance | **Done** | `Animated.Value` + `useNativeDriver`; only `transform`/`opacity` animated. Minute label throttled to changes only (~10 renders/drag instead of ~60/s). Spring-back on release. |
+| 2 — deliberate gesture | **Done** | Snaps to 5-min steps; `Vibration.vibrate(10)` per detent, `(30)` on commit; taps under 20dp ignored. A 600px drag produced exactly **90 min**, the predicted value. |
+| 3 — shrink idle window | **Done** | Idle 96×56dp pill, grown to 220×440dp on `onPanResponderGrant` via `Overlay.setLayout`, restored after the spring settles. **Resizing mid-gesture does not break the touch stream** — verified. |
+| 4 — notification stop action | **Done** | `actions=1`, `"End session"` → `startService` (getService, `FLAG_IMMUTABLE`). Text is `M:SS left`, ticking. Tapping it stopped the session and the service. |
+| 5 — survive process death | **Done** | A 90-min session survived force-stop **and an APK reinstall**, restored at 88:20 with the original deadline intact. Expired sessions are not resurrected. |
+| 6 — session-end feedback | **Done** | Vibration waveform + `id=43` "Focus session complete / Nice work." on a separate `tether_done` channel at `IMPORTANCE_DEFAULT` so it is audible. Ongoing notification returns to idle. |
+
+### One gap found and fixed during verification
+
+`START_STICKY` covers an OOM kill but **not** an explicit force-stop — Android
+deliberately suppresses sticky restarts until the user relaunches the app. So
+reopening after a force-stop showed an idle app while the persisted session was
+still ticking down in storage.
+
+Fixed in `MainApplication.onCreate()`: it calls `Prefs.hydrate(this)` and starts
+`TetherService` if a session is live. That hook runs on **every** process start —
+activity, service, or accessibility service — which is the only place that covers
+all of them. It is wrapped in try/catch because Android 12+ can refuse a
+background foreground-service start.
+
+### Not verifiable on an emulator
+
+- **Haptics.** `Vibration` calls are made but the emulator has no vibrator, so the
+  detent feel is unproven. Check on hardware.
+- **Real drag feel.** Verified programmatically via `adb input swipe`, which proves
+  the mapping and the window resize, not how it feels under a thumb.
+- **Frame timing.** The emulator is slower than a phone; its jank numbers mean
+  little either way.
+
+
+---
+
 ## 1. Mission
 
 Tether blocks distracting apps during a focus session. The session is started by

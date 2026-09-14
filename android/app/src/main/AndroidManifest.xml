@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Session-end feedback. Normal permission: granted at install, no prompt. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!--
       Android 11+ hides the installed-app list unless you declare what you want to see.
       This <queries> block is what makes the blocklist settings screen non-empty.

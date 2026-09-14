@@ -36,6 +36,12 @@ class FocusModule(private val reactContext: ReactApplicationContext) :
     fun startSession(minutes: Int, blocklist: ReadableArray, promise: Promise) {
         val blocked = (0 until blocklist.size()).mapNotNull { blocklist.getString(it) }.toSet()
         FocusSessionStore.start(minutes, blocked)
+        // Persist immediately so the session survives an OOM kill or force-stop.
+        Prefs.saveSession(
+            reactContext,
+            FocusSessionStore.endAtMs,
+            FocusSessionStore.durationMinutes,
+        )
         TetherService.start(reactContext) // idempotent; guarantees the ticker is running
         emitSessionChanged()
         promise.resolve(state())
@@ -44,6 +50,7 @@ class FocusModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun stopSession(promise: Promise) {
         FocusSessionStore.stop()
+        Prefs.clearSession(reactContext)
         emitSessionChanged()
         promise.resolve(state())
     }
