@@ -1,0 +1,153 @@
+import {DeviceEventEmitter, NativeModules} from 'react-native';
+
+const {TetherFocus, TetherOverlay, TetherBlocking, TetherPermissions} =
+  NativeModules;
+
+/* ------------------------------------------------------------------ */
+/* THE SHARED CONTRACT -- agree on this before splitting up            */
+/* ------------------------------------------------------------------ */
+
+export type FocusState = {
+  isActive: boolean;
+  durationMinutes: number;
+  endAtMs: number;
+  remainingMs: number;
+  remainingMinutes: number;
+};
+
+export type InstalledApp = {
+  packageName: string;
+  label: string;
+};
+
+export type PermissionStatus = {
+  overlay: boolean;
+  accessibility: boolean;
+  notifications: boolean;
+};
+
+/* ------------------------------------------------------------------ */
+/* Person A -- timer + session                                         */
+/* ------------------------------------------------------------------ */
+
+export const Focus = {
+  /** Start the foreground service. Call after permissions are granted. */
+  arm: (): Promise<boolean> => TetherFocus.arm(),
+  disarm: (): Promise<boolean> => TetherFocus.disarm(),
+
+  startSession: (minutes: number, blocklist: string[]): Promise<FocusState> =>
+    TetherFocus.startSession(minutes, blocklist),
+
+  stopSession: (): Promise<FocusState> => TetherFocus.stopSession(),
+
+  getState: (): Promise<FocusState> => TetherFocus.getState(),
+
+  setBlocklist: (blocklist: string[]): Promise<boolean> =>
+    TetherFocus.setBlocklist(blocklist),
+
+  setWidgetTriggers: (packages: string[]): Promise<boolean> =>
+    TetherFocus.setWidgetTriggers(packages),
+};
+
+/* ------------------------------------------------------------------ */
+/* Person A + C -- floating windows                                    */
+/* ------------------------------------------------------------------ */
+
+export type OverlayOptions = {
+  /** dp, or Overlay.MATCH_PARENT / Overlay.WRAP_CONTENT */
+  width?: number;
+  height?: number;
+  x?: number;
+  y?: number;
+  gravity?:
+    | 'top'
+    | 'bottom'
+    | 'center'
+    | 'topLeft'
+    | 'topRight'
+    | 'bottomLeft'
+    | 'bottomRight';
+  /** true => this window can take key input (e.g. swallow the back button) */
+  focusable?: boolean;
+  /** true => taps outside this window reach the app underneath */
+  touchThrough?: boolean;
+};
+
+export const Overlay = {
+  MATCH_PARENT: TetherOverlay?.MATCH_PARENT ?? -1,
+  WRAP_CONTENT: TetherOverlay?.WRAP_CONTENT ?? -2,
+
+  /**
+   * `name` must match a component registered via AppRegistry in index.js.
+   * Calling show() on something already visible just updates its props.
+   */
+  show: (
+    name: string,
+    options?: OverlayOptions,
+    props?: Record<string, unknown>,
+  ): Promise<boolean> =>
+    TetherOverlay.show(name, options ?? null, props ?? null),
+
+  /** Resize/move without remounting React -- component state survives. */
+  setLayout: (name: string, options: OverlayOptions): Promise<boolean> =>
+    TetherOverlay.setLayout(name, options),
+
+  update: (name: string, props: Record<string, unknown>): Promise<boolean> =>
+    TetherOverlay.update(name, props),
+
+  hide: (name: string): Promise<boolean> => TetherOverlay.hide(name),
+  hideAll: (): Promise<boolean> => TetherOverlay.hideAll(),
+  isShowing: (name: string): Promise<boolean> => TetherOverlay.isShowing(name),
+};
+
+/* ------------------------------------------------------------------ */
+/* Person B -- blocking                                                */
+/* ------------------------------------------------------------------ */
+
+export const Blocking = {
+  isAccessibilityEnabled: (): Promise<boolean> =>
+    TetherBlocking.isAccessibilityEnabled(),
+  openAccessibilitySettings: (): Promise<boolean> =>
+    TetherBlocking.openAccessibilitySettings(),
+  getInstalledApps: (): Promise<InstalledApp[]> =>
+    TetherBlocking.getInstalledApps(),
+  getSuggestedBlocklist: (): Promise<string[]> =>
+    TetherBlocking.getSuggestedBlocklist(),
+};
+
+/* ------------------------------------------------------------------ */
+/* Permissions (all of them are settings screens, not dialogs)         */
+/* ------------------------------------------------------------------ */
+
+export const Permissions = {
+  getStatus: (): Promise<PermissionStatus> => TetherPermissions.getStatus(),
+  openOverlaySettings: (): Promise<boolean> =>
+    TetherPermissions.openOverlaySettings(),
+  openAccessibilitySettings: (): Promise<boolean> =>
+    TetherPermissions.openAccessibilitySettings(),
+  openNotificationSettings: (): Promise<boolean> =>
+    TetherPermissions.openNotificationSettings(),
+};
+
+/* ------------------------------------------------------------------ */
+/* Events emitted from native                                          */
+/* ------------------------------------------------------------------ */
+
+export type TickEvent = {remainingMs: number; remainingMinutes: number};
+export type SessionEvent = FocusState;
+export type ForegroundAppEvent = {packageName: string; blocked: boolean};
+
+export const TetherEvents = {
+  onTick: (fn: (e: TickEvent) => void) =>
+    DeviceEventEmitter.addListener('tether:tick', fn),
+
+  onSessionChanged: (fn: (e: SessionEvent) => void) =>
+    DeviceEventEmitter.addListener('tether:session', fn),
+
+  /** Person B produces this; Person C consumes it. */
+  onForegroundApp: (fn: (e: ForegroundAppEvent) => void) =>
+    DeviceEventEmitter.addListener('tether:foregroundApp', fn),
+};
+
+/** True when the native side is actually linked (i.e. not a stale JS-only build). */
+export const isNativeReady = Boolean(TetherFocus && TetherOverlay);
