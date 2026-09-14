@@ -41,15 +41,26 @@ export function startSnake(): void {
   }
   started = true;
 
-  showSnake();
-
-  // The overlay permission is granted on a Settings screen, so the first attempt
-  // often fails. Retry whenever the user comes back to the app.
-  AppState.addEventListener('change', state => {
+  /**
+   * The snake belongs on TOP OF OTHER APPS -- not on top of Tether itself,
+   * where it covers the app's own controls (it sat right over the blocklist
+   * search box). So it hides whenever Tether is in the foreground and comes
+   * back the moment the user leaves.
+   *
+   * This doubles as the permission retry: SYSTEM_ALERT_WINDOW is granted on a
+   * Settings screen, so the first attempt usually fails, and every return to
+   * the background re-attempts it.
+   */
+  const apply = (state: string) => {
     if (state === 'active') {
+      Overlay.hide('SnakeOverlay').catch(() => {});
+    } else {
       showSnake();
     }
-  });
+  };
+
+  apply(AppState.currentState);
+  AppState.addEventListener('change', apply);
 }
 
 export function hideSnake(): Promise<boolean> {
