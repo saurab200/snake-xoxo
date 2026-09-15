@@ -180,9 +180,6 @@ export default function TaskCardOverlay({nonce}: Props) {
    * never wakes again costs an animation, not a window stuck over the screen.
    */
   const toggle = (item: TodoItem, where: {x: number; y: number}) => {
-    if (item.readOnly) {
-      return;
-    }
     if (isDone(item.id)) {
       uncompleteTask(item.id);
       return;
@@ -222,17 +219,16 @@ export default function TaskCardOverlay({nonce}: Props) {
       items: s.items.filter(i =>
         tab === 'done'
           ? isDone(i.id) && i.id !== clearingId
-          : i.readOnly || !isDone(i.id) || i.id === clearingId,
+          : !isDone(i.id) || i.id === clearingId,
       ),
     }))
     .filter(s => s.items.length > 0);
 
   const total = visible.reduce((n, s) => n + s.items.length, 0);
 
-  /** Read-only rows are figures, not work, so they are not "outstanding". */
   const outstanding =
     sections?.reduce(
-      (n, s) => n + s.items.filter(i => !i.readOnly && !isDone(i.id)).length,
+      (n, s) => n + s.items.filter(i => !isDone(i.id)).length,
       0,
     ) ?? 0;
 
@@ -432,27 +428,27 @@ function TaskRow({
         </Text>
       </View>
 
-      {/* Read-only rows -- streak, minutes today, distractions blocked -- are
-          figures that regenerate on every fetch, so there is nothing to tick. */}
-      {item.readOnly ? null : (
-        <TouchableOpacity
-          style={styles.tickTarget}
-          activeOpacity={0.7}
-          hitSlop={HIT}
-          onPressIn={takePosition}
-          onPress={() => onToggle(where)}>
-          <View
-            style={[
-              styles.tickBox,
-              ticked && styles.tickBoxDone,
-              {transform: [{scale: boxScale}]},
-            ]}>
-            <Text style={[styles.tickGlyph, ticked && styles.tickGlyphDone]}>
-              ✓
-            </Text>
-          </View>
-        </TouchableOpacity>
-      )}
+      {/* EVERY row gets a box. The stat rows (streak, minutes today,
+          distractions blocked) are claimable too -- each has a stable id, so
+          completedTaskIds lets it be claimed exactly once, and unticking
+          refunds, which makes toggling worth nothing. */}
+      <TouchableOpacity
+        style={styles.tickTarget}
+        activeOpacity={0.7}
+        hitSlop={HIT}
+        onPressIn={takePosition}
+        onPress={() => onToggle(where)}>
+        <View
+          style={[
+            styles.tickBox,
+            ticked && styles.tickBoxDone,
+            {transform: [{scale: boxScale}]},
+          ]}>
+          <Text style={[styles.tickGlyph, ticked && styles.tickGlyphDone]}>
+            ✓
+          </Text>
+        </View>
+      </TouchableOpacity>
     </View>
   );
 }
