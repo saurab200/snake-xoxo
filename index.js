@@ -13,12 +13,14 @@ import {name as appName} from './app.json';
 import BlockOverlay from './src/overlays/BlockOverlay';
 import KillSwitchOverlay from './src/overlays/KillSwitchOverlay';
 import ReminderOverlay from './src/overlays/ReminderOverlay';
+import RewardOverlay from './src/overlays/RewardOverlay';
 import SnakeOverlay from './src/overlays/SnakeOverlay';
 import TaskCardOverlay from './src/overlays/TaskCardOverlay';
 import WidgetOverlay from './src/overlays/WidgetOverlay';
 import XpBarOverlay from './src/overlays/XpBarOverlay';
 import {startSnake} from './src/state/bootstrap';
 import {initializeGamification} from './src/state/gamificationStore';
+import {startRewardTrigger} from './src/state/rewardTrigger';
 import {startWidgetTrigger} from './src/state/widgetTrigger';
 
 AppRegistry.registerComponent(appName, () => App);
@@ -30,6 +32,7 @@ AppRegistry.registerComponent('ReminderOverlay', () => ReminderOverlay);
 AppRegistry.registerComponent('KillSwitchOverlay', () => KillSwitchOverlay);
 AppRegistry.registerComponent('TaskCardOverlay', () => TaskCardOverlay);
 AppRegistry.registerComponent('XpBarOverlay', () => XpBarOverlay);
+AppRegistry.registerComponent('RewardOverlay', () => RewardOverlay);
 
 /**
  * Started at module scope, NOT from a React component.
@@ -49,5 +52,7 @@ AppRegistry.registerComponent('XpBarOverlay', () => XpBarOverlay);
  * initializeGamification() is idempotent, so a re-import cannot double-register.
  */
 initializeGamification();
+// Must come after initializeGamification so no award can fire before it listens.
+startRewardTrigger();
 startWidgetTrigger();
 startSnake();
