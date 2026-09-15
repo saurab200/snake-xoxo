@@ -33,12 +33,18 @@ const LEADERBOARD_URL = 'https://tether.invalid/api/leaderboard';
 /** Hard ceiling on how long the demo waits for the network. */
 const TIMEOUT_MS = 2000;
 
+/**
+ * buildRows() sorts by points, not by array order, so the points -- not the
+ * order of this list -- are what put these five in the intended sequence. The
+ * last entry sits far enough above a demo-sized local score (~80, plus 10 XP a
+ * task and a point a focused minute) that the signed-in user lands 6th.
+ */
 const MOCK_LEADERBOARD: LeaderboardEntry[] = [
-  {id: 'mock-1', username: 'FocusKing', points: 450},
-  {id: 'mock-2', username: 'HackathonJudge', points: 420},
-  {id: 'mock-3', username: 'DemoUser', points: 360},
-  {id: 'mock-4', username: 'SnakeMaster', points: 220},
-  {id: 'mock-5', username: 'DeepWorker', points: 180},
+  {id: 'mock-1', username: 'Gautam Buddha', points: 486},
+  {id: 'mock-2', username: 'Friedrich Nietzsche', points: 412},
+  {id: 'mock-3', username: 'Napoleon', points: 347},
+  {id: 'mock-4', username: 'Genghis Khan', points: 263},
+  {id: 'mock-5', username: 'Kanye West', points: 188},
 ];
 
 /** Accept only well-formed rows; anything else falls back to the mock list. */
