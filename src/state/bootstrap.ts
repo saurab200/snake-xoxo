@@ -33,6 +33,19 @@ async function showSnake() {
     await Focus.arm();
 
     /**
+     * Re-check the foreground state before showing anything.
+     *
+     * Everything above is awaited, and on a cold start straight into Tether
+     * those awaits routinely outlast the app coming to the foreground: the
+     * listener below fires 'active' and hides overlays that have not been
+     * created yet, then these shows land on top of Tether's own UI. The snake
+     * and the X then sit over the app until the next background trip.
+     */
+    if (AppState.currentState === 'active') {
+      return;
+    }
+
+    /**
      * ORDER MATTERS. Among overlay windows, z-order is the order they were
      * added, so the bar goes up FIRST and the snake on top of it -- that is
      * what lets the head rise out of the bar during a session instead of
