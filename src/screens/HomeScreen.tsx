@@ -21,6 +21,7 @@ import RewardBadge from '../components/RewardBadge';
 import {REWARD_LAYOUT} from '../overlays/RewardOverlay';
 import {PEEK_NOW_EVENT} from '../overlays/SnakeOverlay';
 import {WIDGET_LAYOUT} from '../overlays/WidgetOverlay';
+import {logout, useAuth} from '../state/authStore';
 import {rearm, setSnakePeeking, startSnake} from '../state/bootstrap';
 import {useGamification} from '../state/gamificationStore';
 import {Storage} from '../state/storage';
@@ -35,6 +36,7 @@ const EMPTY_PERMS: PermissionStatus = {
 export default function HomeScreen() {
   const session = useFocusSession();
   const game = useGamification();
+  const auth = useAuth();
   const [perms, setPerms] = useState<PermissionStatus>(EMPTY_PERMS);
   /** Dev only: lets the duplicate-event test re-send the identical payload. */
   const lastSimulated = useRef<FocusState | null>(null);
@@ -318,6 +320,16 @@ export default function HomeScreen() {
         </Text>
         <Button label="Hide all overlays" onPress={Overlay.hideAll} muted />
       </Section>
+
+      <Section title="Account">
+        <Text style={styles.accountName}>{auth.user?.name ?? 'Signed in'}</Text>
+        <Text style={styles.accountEmail}>{auth.user?.email ?? ''}</Text>
+        <Button label="Log out" onPress={() => logout()} muted />
+        <Text style={styles.hint}>
+          Signing out keeps your points, skins, blocklist and reminders — it only
+          ends the session.
+        </Text>
+      </Section>
     </ScrollView>
   );
 }
@@ -406,6 +418,8 @@ const styles = StyleSheet.create({
   },
   levelFill: {height: '100%', borderRadius: 3},
   levelCaption: {color: '#8b949e', fontSize: 11, marginTop: 6},
+  accountName: {color: '#e6edf3', fontSize: 15, fontWeight: '700'},
+  accountEmail: {color: '#8b949e', fontSize: 12, marginTop: 2},
   skinRow: {flexDirection: 'row', gap: 8, marginTop: 12},
   status: {color: '#e6edf3', fontSize: 16, marginBottom: 10},
   hint: {color: '#8b949e', fontSize: 12, marginTop: 8},

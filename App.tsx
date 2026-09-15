@@ -7,10 +7,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import AuthFlow from './src/screens/AuthFlow';
 import BlocklistScreen from './src/screens/BlocklistScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import IntegrationsScreen from './src/screens/IntegrationsScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
+import {useAuth} from './src/state/authStore';
 
 type Tab = 'home' | 'blocklist' | 'integrations' | 'leaderboard';
 
@@ -23,6 +25,24 @@ const TABS: {id: Tab; label: string}[] = [
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('home');
+  const auth = useAuth();
+
+  /**
+   * The auth gate covers only the ACTIVITY's React tree.
+   *
+   * The overlays, the foreground service, blocking and the gamification
+   * listeners are all started from index.js at module scope, so none of them
+   * are affected by what this component returns. A signed-out user simply sees
+   * the auth flow instead of the tabs.
+   */
+  if (!auth.initialized || !auth.isAuthenticated) {
+    return (
+      <>
+        <StatusBar barStyle="light-content" backgroundColor="#0d1117" />
+        <AuthFlow initializing={!auth.initialized} />
+      </>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.root}>
