@@ -1,7 +1,6 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useRef} from 'react';
 import {
   Animated,
-  BackHandler,
   Easing,
   SafeAreaView,
   StyleSheet,
@@ -9,19 +8,19 @@ import {
 } from 'react-native';
 import SnakeMark from '../components/SnakeMark';
 import AuthWelcomeScreen from './AuthWelcomeScreen';
-import LoginScreen from './LoginScreen';
-import SignUpScreen from './SignUpScreen';
 
 /**
- * The unauthenticated flow.
+ * The unauthenticated flow: one screen.
  *
- * Three views behind plain local state -- no navigation library for what is
- * really one screen with three faces. Animated is safe here, unlike in the
- * overlays: this only ever renders while Tether is in the foreground, so the
- * frame loop is running.
+ * It used to be three -- welcome, sign up, log in -- behind local state. With
+ * no password there is nothing to tell signing up from logging in, so the
+ * welcome screen asks for an email and that is the entire flow. No navigation
+ * library, and no back handler, because there is nowhere to go back to.
+ *
+ * Animated is safe here, unlike in the overlays: this only ever renders while
+ * Tether is in the FOREGROUND, so the frame loop is running. See HANDOFF.md
+ * section 10 for why that distinction matters so much in this codebase.
  */
-
-type AuthView = 'welcome' | 'login' | 'signup';
 
 type Props = {
   /** True while persisted auth state is still being read. */
@@ -29,36 +28,17 @@ type Props = {
 };
 
 export default function AuthFlow({initializing = false}: Props) {
-  const [view, setView] = useState<AuthView>('welcome');
-
-  // Cross-fade with a small lift on view change. Cheap, native-driven.
-  const fade = useRef(new Animated.Value(1)).current;
+  // A one-off fade-in on mount. Cheap, native-driven.
+  const fade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    fade.setValue(0);
     Animated.timing(fade, {
       toValue: 1,
       duration: 220,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
-  }, [view, fade]);
-
-  /**
-   * Android back goes login/signup -> welcome instead of quitting the app.
-   * Returning false on the welcome screen keeps the normal "exit" behaviour,
-   * which is what a user expects from a root screen.
-   */
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (view === 'welcome') {
-        return false;
-      }
-      setView('welcome');
-      return true;
-    });
-    return () => sub.remove();
-  }, [view]);
+  }, [fade]);
 
   if (initializing) {
     // Branded hold rather than a spinner on a blank screen. Usually one frame.
@@ -86,26 +66,7 @@ export default function AuthFlow({initializing = false}: Props) {
   return (
     <SafeAreaView style={styles.root}>
       <Animated.View style={[styles.fill, animatedStyle]}>
-        {view === 'welcome' ? (
-          <AuthWelcomeScreen
-            onLogin={() => setView('login')}
-            onSignUp={() => setView('signup')}
-          />
-        ) : null}
-
-        {view === 'login' ? (
-          <LoginScreen
-            onBack={() => setView('welcome')}
-            onSwitchToSignUp={() => setView('signup')}
-          />
-        ) : null}
-
-        {view === 'signup' ? (
-          <SignUpScreen
-            onBack={() => setView('welcome')}
-            onSwitchToLogin={() => setView('login')}
-          />
-        ) : null}
+        <AuthWelcomeScreen />
       </Animated.View>
     </SafeAreaView>
   );

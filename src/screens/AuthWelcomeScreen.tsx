@@ -1,97 +1,121 @@
 import React, {useState} from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import AuthTextInput from '../components/AuthTextInput';
 import SnakeMark from '../components/SnakeMark';
-import {continueAsDemo} from '../state/authStore';
+import {continueWithEmail, isValidEmail} from '../state/authStore';
 
 /**
- * First thing a new user sees. One job: explain what Tether is in two lines and
- * offer three clearly ranked ways in -- primary, secondary, and a quiet escape
- * hatch for a demo with no typing.
+ * The whole sign-in experience: one field, one button.
+ *
+ * There is no password, no separate sign-up, and no confirmation step. Tether
+ * has no backend, so a password could only ever be checked against the device
+ * it was typed on -- which proves nothing while costing the user a form. The
+ * email is what a profile and a leaderboard row hang on, so that is all we ask
+ * for. University and work addresses are the expected case; personal ones are
+ * accepted too (see isValidEmail).
  */
-
-type Props = {
-  onLogin: () => void;
-  onSignUp: () => void;
-};
-
-export default function AuthWelcomeScreen({onLogin, onSignUp}: Props) {
+export default function AuthWelcomeScreen() {
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function demo() {
+  const ready = isValidEmail(email);
+
+  async function submit() {
     if (busy) {
       return;
     }
+    setError(null);
     setBusy(true);
     try {
-      await continueAsDemo();
+      const result = await continueWithEmail(email);
+      if (!result.ok) {
+        setError(result.message);
+      }
+      // On success the auth gate unmounts this screen; nothing to do here.
     } finally {
-      // The auth gate unmounts this screen on success; resetting matters only
-      // if it somehow does not.
       setBusy(false);
     }
   }
 
   return (
-    <View style={styles.root}>
-      <View style={styles.hero}>
-        <SnakeMark size={86} />
+    <KeyboardAvoidingView
+      style={styles.fill}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        style={styles.fill}
+        contentContainerStyle={styles.root}
+        keyboardShouldPersistTaps="handled">
+        <View style={styles.hero}>
+          <SnakeMark size={86} />
+          <Text style={styles.wordmark}>TETHER</Text>
+          <Text style={styles.tagline}>Focus without distractions.</Text>
+        </View>
 
-        <Text style={styles.wordmark}>TETHER</Text>
-        <Text style={styles.tagline}>Focus without distractions.</Text>
-      </View>
+        <View style={styles.pitch}>
+          <Text style={styles.pitchTitle}>Own your attention.</Text>
+          <Text style={styles.pitchBody}>
+            Pull the snake to start a focus session. Tether blocks the apps that
+            pull you away, and rewards the time you keep.
+          </Text>
+        </View>
 
-      <View style={styles.pitch}>
-        <Text style={styles.pitchTitle}>Own your attention.</Text>
-        <Text style={styles.pitchBody}>
-          Pull the snake to start a focus session. Tether blocks the apps that
-          pull you away, and rewards the time you keep.
-        </Text>
-      </View>
+        <View style={styles.actions}>
+          <AuthTextInput
+            label="Email"
+            placeholder="you@university.edu"
+            value={email}
+            onChangeText={t => {
+              setEmail(t);
+              if (error) {
+                setError(null);
+              }
+            }}
+            error={error}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            returnKeyType="go"
+            onSubmitEditing={submit}
+            editable={!busy}
+          />
 
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.primary}
-          onPress={onSignUp}
-          accessibilityRole="button"
-          accessibilityLabel="Create a Tether account">
-          <Text style={styles.primaryText}>Create account</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.primary, !ready && styles.primaryDisabled]}
+            onPress={submit}
+            disabled={busy || !ready}
+            accessibilityRole="button"
+            accessibilityLabel="Continue into Tether">
+            {busy ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.primaryText}>Continue</Text>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.secondary}
-          onPress={onLogin}
-          accessibilityRole="button"
-          accessibilityLabel="Log in to Tether">
-          <Text style={styles.secondaryText}>Log in</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.ghost}
-          onPress={demo}
-          disabled={busy}
-          accessibilityRole="button"
-          accessibilityLabel="Continue as a demo user">
-          {busy ? (
-            <ActivityIndicator color="#8b949e" size="small" />
-          ) : (
-            <Text style={styles.ghostText}>Continue as demo</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </View>
+          <Text style={styles.fineprint}>
+            Your email stays on this device. No password, no verification email.
+          </Text>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  fill: {flex: 1, backgroundColor: '#0d1117'},
   root: {
-    flex: 1,
-    backgroundColor: '#0d1117',
+    flexGrow: 1,
     paddingHorizontal: 28,
     paddingTop: 56,
     paddingBottom: 36,
@@ -106,7 +130,7 @@ const styles = StyleSheet.create({
   },
   tagline: {color: '#8b949e', fontSize: 14, marginTop: 8},
 
-  // Takes the slack, so the hero sits high and the buttons sit low regardless
+  // Takes the slack, so the hero sits high and the field sits low regardless
   // of screen height.
   pitch: {flex: 1, justifyContent: 'center'},
   pitchTitle: {
@@ -130,21 +154,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  /** Dimmed until the address parses, so the button says what it will do. */
+  primaryDisabled: {opacity: 0.45},
   primaryText: {color: '#fff', fontSize: 16, fontWeight: '700'},
-  secondary: {
-    backgroundColor: '#161b22',
-    borderWidth: 1,
-    borderColor: '#30363d',
-    borderRadius: 12,
-    minHeight: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
+  fineprint: {
+    color: '#6e7681',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
   },
-  secondaryText: {color: '#e6edf3', fontSize: 16, fontWeight: '700'},
-  ghost: {
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ghostText: {color: '#8b949e', fontSize: 14, fontWeight: '600'},
 });
