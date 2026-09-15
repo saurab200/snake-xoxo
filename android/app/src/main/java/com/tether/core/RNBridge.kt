@@ -46,4 +46,5 @@ object TetherEvents {
     const val FOREGROUND_APP = "tether:foregroundApp" // { packageName, blocked }
     const val LOCKOUT_CHANGED = "tether:lockout"   // { isLockedOut, lockoutUntilMs, ... }
     const val REMINDERS_CHANGED = "tether:reminders" // {}
+    const val CLOCK = "tether:clock"               // { id, t, done } -- see NativeClock
 }

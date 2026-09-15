@@ -30,10 +30,13 @@ export const XP_BAR_LAYOUT = {
  *
  * NOT ANIMATED, on purpose. The bar is on screen precisely when Tether is
  * backgrounded, and in that state React Native advances neither Animated nor JS
- * timers -- a fill that tweened would simply freeze part-way, and a "+10 XP"
- * flash timed to fade would stick forever. Every render paints the final state.
- * State updates themselves arrive fine, because they come from native events
- * and touches rather than from a clock.
+ * timers -- a fill that tweened would simply freeze part-way. Every render
+ * paints the final state. State updates themselves arrive fine, because they
+ * come from native events and touches rather than from a clock.
+ *
+ * The XP flying in from a ticked task is drawn by XpFlightOverlay, a separate
+ * window, on a native clock. It aims at this bar's fill edge -- which is why the
+ * track's 10dp inset is repeated there.
  */
 export default function XpBarOverlay() {
   const {level, xpIntoLevel, xpForLevel, progress, activeSkinColor} =

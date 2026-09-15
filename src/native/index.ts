@@ -6,6 +6,7 @@ const {
   TetherBlocking,
   TetherPermissions,
   TetherReminders,
+  TetherClock,
 } = NativeModules;
 
 /* ------------------------------------------------------------------ */
@@ -100,6 +101,15 @@ export type OverlayOptions = {
   focusable?: boolean;
   /** true => taps outside this window reach the app underneath */
   touchThrough?: boolean;
+  /**
+   * false => the window is invisible to touch (FLAG_NOT_TOUCHABLE).
+   *
+   * `touchThrough` only forwards taps that land OUTSIDE the window; every touch
+   * inside it is swallowed whether or not a component handles it. A full-screen
+   * decorative overlay must therefore set this false, or it makes the whole
+   * phone unresponsive for as long as it is up. Defaults to true.
+   */
+  touchable?: boolean;
 };
 
 export const Overlay = {
@@ -157,6 +167,20 @@ export const Overlay = {
     TetherOverlay.update(name, props),
 
   hide: (name: string): Promise<boolean> => TetherOverlay.hide(name),
+
+  /**
+   * Remove once `delayMs` has passed, timed by the native main looper.
+   *
+   * The other half of showAfter, and what makes a transient overlay safe to put
+   * on screen at all: the removal is queued natively the moment the window goes
+   * up, so it happens even if the JS thread never runs again. A `setTimeout`
+   * here would leave the overlay on screen forever.
+   *
+   * A later `show` of the same overlay cancels a pending hide.
+   */
+  hideAfter: (name: string, delayMs: number): Promise<boolean> =>
+    TetherOverlay.hideAfter(name, delayMs),
+
   hideAll: (): Promise<boolean> => TetherOverlay.hideAll(),
   isShowing: (name: string): Promise<boolean> => TetherOverlay.isShowing(name),
 };
@@ -233,10 +257,38 @@ export const Permissions = {
 };
 
 /* ------------------------------------------------------------------ */
+/* The animation clock                                                 */
+/* ------------------------------------------------------------------ */
+
+export const Clock = {
+  /**
+   * Emit ~30 progress frames per second over `durationMs`, as `tether:clock`
+   * events carrying this `id` and a `t` running 0 -> 1.
+   *
+   * This exists because an overlay cannot animate itself. Overlays are on
+   * screen only while Tether is backgrounded, and RN then advances neither
+   * `Animated` (native driver included) nor JS timers -- a tween freezes
+   * part-way and strands whatever it was drawing. Re-renders driven by native
+   * events DO still happen, which is why the timer pill counts down, so the
+   * clock lives natively and JS only paints. See HANDOFF.md section 10.
+   *
+   * Starting a run with an id already in flight replaces it. Native caps the
+   * duration and always sends a final frame, so a run cannot outlive itself.
+   */
+  start: (id: number, durationMs: number): Promise<boolean> =>
+    TetherClock.start(id, durationMs),
+
+  /** Stop a run early. A final frame (`t: 1, done: true`) is still delivered. */
+  cancel: (id: number): Promise<boolean> => TetherClock.cancel(id),
+};
+
+/* ------------------------------------------------------------------ */
 /* Events emitted from native                                          */
 /* ------------------------------------------------------------------ */
 
 export type TickEvent = {remainingMs: number; remainingMinutes: number};
+/** One animation frame from NativeClock. `t` is 0..1; `done` marks the last. */
+export type ClockEvent = {id: number; t: number; done: boolean};
 export type SessionEvent = FocusState;
 export type ForegroundAppEvent = {packageName: string; blocked: boolean};
 
@@ -256,6 +308,10 @@ export const TetherEvents = {
 
   onRemindersChanged: (fn: () => void) =>
     DeviceEventEmitter.addListener('tether:reminders', fn),
+
+  /** Animation frames from Clock.start(). See src/state/nativeClock.ts. */
+  onClock: (fn: (e: ClockEvent) => void) =>
+    DeviceEventEmitter.addListener('tether:clock', fn),
 };
 
 /** True when the native side is actually linked (i.e. not a stale JS-only build). */

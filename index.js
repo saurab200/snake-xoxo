@@ -18,6 +18,7 @@ import SnakeOverlay from './src/overlays/SnakeOverlay';
 import TaskCardOverlay from './src/overlays/TaskCardOverlay';
 import WidgetOverlay from './src/overlays/WidgetOverlay';
 import XpBarOverlay from './src/overlays/XpBarOverlay';
+import XpFlightOverlay from './src/overlays/XpFlightOverlay';
 import {startSnake} from './src/state/bootstrap';
 import {initializeGamification} from './src/state/gamificationStore';
 import {startRewardTrigger} from './src/state/rewardTrigger';
@@ -32,6 +33,7 @@ AppRegistry.registerComponent('ReminderOverlay', () => ReminderOverlay);
 AppRegistry.registerComponent('KillSwitchOverlay', () => KillSwitchOverlay);
 AppRegistry.registerComponent('TaskCardOverlay', () => TaskCardOverlay);
 AppRegistry.registerComponent('XpBarOverlay', () => XpBarOverlay);
+AppRegistry.registerComponent('XpFlightOverlay', () => XpFlightOverlay);
 AppRegistry.registerComponent('RewardOverlay', () => RewardOverlay);
 
 /**

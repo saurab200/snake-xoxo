@@ -86,6 +86,19 @@ class OverlayModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(true)
     }
 
+    /**
+     * Remove after a delay, timed natively.
+     *
+     * What guarantees a transient overlay leaves the screen. A JS timer would
+     * not fire while Tether is backgrounded, which is the only state these
+     * windows are ever seen in -- so the flourish would simply stay there.
+     */
+    @ReactMethod
+    fun hideAfter(name: String, delayMs: Double, promise: Promise) {
+        OverlayManager.hideAfter(reactContext, name, delayMs.toLong())
+        promise.resolve(true)
+    }
+
     @ReactMethod
     fun hide(name: String, promise: Promise) {
         OverlayManager.hide(reactContext, name)
@@ -111,6 +124,7 @@ class OverlayModule(private val reactContext: ReactApplicationContext) :
         gravity = options?.takeIf { it.hasKey("gravity") }?.getString("gravity") ?: "top",
         focusable = options.boolOr("focusable", false),
         touchThrough = options.boolOr("touchThrough", true),
+        touchable = options.boolOr("touchable", true),
     )
 
     private fun ReadableMap?.intOr(key: String, fallback: Int): Int =

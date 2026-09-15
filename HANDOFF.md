@@ -100,9 +100,15 @@ nor the completion callbacks of native-driver animations. Anything that must
 happen after a delay, or when an animation ends, has to be timed by a native
 `Handler`.
 
-The same rule kills two tempting bits of UI polish: an XP bar that tweens its
-fill, and a "+10 XP" toast that fades out. Both would freeze part-way. Overlays
-paint their final state on every render.
+The same rule used to kill two tempting bits of UI polish -- an XP bar that
+tweens its fill, and a "+10 XP" toast that fades out -- because both would freeze
+part-way. **The way to have them is the same rule applied harder: put the clock
+in Kotlin too.** `NativeClock` (`core/NativeClock.kt`, `Clock.start` in
+`src/native`) emits ~30 progress events a second for a bounded duration; JS
+subscribes and re-renders, and every render still paints a finished state. Motion
+that is native-timed and JS-painted works backgrounded; motion that is
+JS-timed does not, whatever draws it. The task tick's XP flight is built on this
+-- see §12.
 
 ### Do not clone into a path with a space
 
@@ -445,6 +451,28 @@ without it a refresh would resurrect everything the user had just cleared.
 Rows marked `readOnly` (the Focus-stats rows: streak, minutes today, distractions
 blocked) render without a tick control. They are figures that regenerate on every
 fetch, so "completing" one is meaningless -- and would have been free XP.
+
+### The flourish, and the third window it needs
+
+Ticking plays a ~1.2s flourish: the row empties out, a `+10 XP` token flies from
+the tick box to the leading edge of the XP bar's fill, and a line of
+encouragement appears under it. Three things about it are not negotiable:
+
+- **It needs a third window.** The panel is anchored right, the bar is 18dp
+  across the top, and nothing can draw across a window boundary. `XpFlightOverlay`
+  is a full-screen stage that exists only for the flourish. Every gravity-placed
+  overlay is laid out inside the same parent frame (the display minus the system
+  bars), which is why the flight overlay can derive the panel's origin from its
+  own measured size rather than guessing.
+- **It is `touchable: false`.** A window swallows every touch inside its bounds
+  and unhandled touches are NOT forwarded (§5). Full-screen without
+  `FLAG_NOT_TOUCHABLE`, it would freeze the whole phone for a second.
+- **Both of its clocks are native.** `NativeClock` drives the frames and
+  `Overlay.hideAfter` removes the window. A JS timer for either would strand a
+  screen-sized overlay on top of everything.
+
+The panel and the flight overlay subscribe to the SAME run id, which is how two
+separate windows animate in step.
 
 ### Ticking does NOT fire an AwardEvent
 

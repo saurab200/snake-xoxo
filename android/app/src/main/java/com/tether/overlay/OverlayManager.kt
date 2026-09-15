@@ -47,6 +47,16 @@ object OverlayManager {
     private val pendingShows = mutableMapOf<String, Runnable>()
 
     /**
+     * Removals scheduled for later by hideAfter, one per overlay.
+     *
+     * This is the guarantee behind any transient overlay: the window goes away
+     * on the native clock whether or not JS ever ran again. A show() cancels a
+     * pending hide, so re-showing a transient overlay cannot be torn down by the
+     * removal queued for its previous appearance.
+     */
+    private val pendingHides = mutableMapOf<String, Runnable>()
+
+    /**
      * Overlays that must stay above every other overlay.
      *
      * Window z-order among TYPE_APPLICATION_OVERLAY windows is add-order, so the
@@ -69,6 +79,16 @@ object OverlayManager {
         val focusable: Boolean = false,
         /** true => touches outside this view's bounds go to the app underneath */
         val touchThrough: Boolean = true,
+        /**
+         * false => the window is invisible to touch entirely (FLAG_NOT_TOUCHABLE).
+         *
+         * `touchThrough` only forwards touches that land OUTSIDE the window, so
+         * a full-screen decorative overlay would otherwise swallow every touch
+         * on the device for as long as it existed -- see HANDOFF.md section 5 on
+         * the task panel being a dead zone. Anything full-screen that the user
+         * is not meant to press must set this false.
+         */
+        val touchable: Boolean = true,
     )
 
     fun canDraw(context: Context): Boolean = Settings.canDrawOverlays(context)
@@ -83,6 +103,7 @@ object OverlayManager {
         }
         main.post {
             cancelPendingShow(name) // this show supersedes any scheduled one
+            cancelPendingHide(name) // ...and outlives a removal queued earlier
             if (views.containsKey(name)) {
                 // Already up -- just push new props.
                 views[name]?.appProperties = props ?: Bundle()
@@ -174,12 +195,39 @@ object OverlayManager {
         }
     }
 
+    /**
+     * Remove LATER, timed natively.
+     *
+     * The other half of showAfter, and what makes a transient overlay safe. A
+     * flourish that draws itself over the whole screen has to be certain to
+     * leave, and the JS timer that would normally retire it does not run while
+     * Tether is backgrounded -- which is the only state these overlays are seen
+     * in. So the removal is queued on the looper the moment the window goes up,
+     * and it fires even if the JS thread never wakes again.
+     */
+    fun hideAfter(context: Context, name: String, delayMs: Long) {
+        val app = context.applicationContext
+        main.post {
+            cancelPendingHide(name)
+            val task = Runnable {
+                pendingHides.remove(name)
+                hide(app, name)
+            }
+            pendingHides[name] = task
+            main.postDelayed(task, delayMs.coerceAtLeast(0L))
+        }
+    }
+
     private fun cancelPending(name: String) {
         pendingLayouts.remove(name)?.let { main.removeCallbacks(it) }
     }
 
     private fun cancelPendingShow(name: String) {
         pendingShows.remove(name)?.let { main.removeCallbacks(it) }
+    }
+
+    private fun cancelPendingHide(name: String) {
+        pendingHides.remove(name)?.let { main.removeCallbacks(it) }
     }
 
     /** Main thread only. */
@@ -207,6 +255,7 @@ object OverlayManager {
         main.post {
             cancelPending(name)
             cancelPendingShow(name) // a queued show must not resurrect this
+            cancelPendingHide(name)
             val view = views.remove(name) ?: return@post
             params.remove(name)
             try {
@@ -249,6 +298,7 @@ object OverlayManager {
         var flags = WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         if (!c.focusable) flags = flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
         if (c.touchThrough) flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        if (!c.touchable) flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
 
         return WindowManager.LayoutParams(
             dimen(context, c.width),
