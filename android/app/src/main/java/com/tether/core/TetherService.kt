@@ -165,11 +165,22 @@ class TetherService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                /**
+                 * Ends the SESSION. Does not stop the service.
+                 *
+                 * It used to stopForeground + stopSelf, which took the process
+                 * down with it -- and the snake, the XP bar and the kill switch
+                 * are overlays owned by this process, so they all vanished. The
+                 * snake is meant to be on screen from install onward
+                 * (HANDOFF.md section 11); an easy-to-hit button in the
+                 * notification shade must not be the one thing that removes it.
+                 *
+                 * endSession() refreshes the notification back to "Ready", and
+                 * the ticker keeps running because reminders and lockouts need
+                 * it whether or not a focus session is active.
+                 */
                 endSession(completed = false)
-                stopTicking()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                return START_NOT_STICKY
+                return START_STICKY
             }
             else -> {
                 // Restores a session that was running when the process died.
