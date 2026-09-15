@@ -87,8 +87,11 @@ packages are safe.
 
 ### Overlay resizes that happen "later" are timed in Kotlin
 
-`Overlay.setLayoutAfter(name, config, ms)` and `Overlay.showAfter(name, config,
-props, ms)` exist because `setTimeout` does not work for this. See §10 for the
+`Overlay.showAfter(name, config, props, ms)` exists because `setTimeout` does not
+work for this. (`Overlay.setLayoutAfter` is its sibling for deferred resizes. It
+currently has no caller -- every resize turned out to be immediate once the
+snake stopped waiting on an animation -- but it is kept as the other half of the
+same rule.) See §10 for the
 full story; the short version is that the overlays are on screen precisely when
 Tether is backgrounded, and in that state RN delivers neither JS timer callbacks
 nor the completion callbacks of native-driver animations. Anything that must
