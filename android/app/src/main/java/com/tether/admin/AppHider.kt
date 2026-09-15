@@ -30,8 +30,23 @@ object AppHider {
     private fun dpm(context: Context) =
         context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
 
+    /**
+     * Device Owner AND a live admin component.
+     *
+     * isDeviceOwnerApp() alone is not enough: the owner record survives an
+     * uninstall/reinstall, but the app comes back with a new uid and the admin
+     * component no longer belongs to it. dpm then reports us as owner while
+     * every setApplicationHidden() throws
+     *
+     *   SecurityException: Admin ... does not exist or is not owned by uid N
+     *
+     * which is silent, because each call is caught per package. Checking
+     * isAdminActive() too makes a stale provisioning show up in the UI as
+     * "vanish mode off" instead of as blocking that quietly does nothing.
+     */
     fun isDeviceOwner(context: Context): Boolean = try {
-        dpm(context).isDeviceOwnerApp(context.packageName)
+        val dpm = dpm(context)
+        dpm.isDeviceOwnerApp(context.packageName) && dpm.isAdminActive(admin(context))
     } catch (e: Exception) {
         false
     }
@@ -67,6 +82,10 @@ object AppHider {
                 Prefs.setStringSet(context, KEY_HIDDEN, hidden)
                 dpm(context).setApplicationHidden(admin(context), pkg, true)
             } catch (e: Exception) {
+                // ...but a call that FAILED must not leave a record claiming it
+                // worked, or hiddenCount reports "20 hidden" while nothing is.
+                hidden.remove(pkg)
+                Prefs.setStringSet(context, KEY_HIDDEN, hidden)
                 Log.e(TAG, "could not hide $pkg", e)
             }
         }

@@ -9,6 +9,7 @@ import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
 import com.tether.admin.AppHider
 import com.tether.core.FocusSessionStore
+import com.tether.core.Prefs
 import com.tether.core.RNBridge
 import com.tether.core.Reminders
 import com.tether.core.TetherEvents
@@ -72,6 +73,8 @@ class RemindersModule(private val reactContext: ReactApplicationContext) :
             System.currentTimeMillis() + minutes * 60_000L,
             label ?: "Manual lockout",
         )
+        // A lockout is also an explicit "run now" -- same reasoning as startSession.
+        Prefs.setArmed(reactContext, true)
         TetherService.start(reactContext)
         AppHider.sync(reactContext)
         RNBridge.emit(reactContext, TetherEvents.LOCKOUT_CHANGED, lockoutState())
