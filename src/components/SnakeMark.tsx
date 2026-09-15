@@ -52,7 +52,7 @@ export default function SnakeMark({size = 76, color = '#22c55e'}: Props) {
       style={[styles.root, {width: size, height: size}]}
       accessible
       accessibilityRole="image"
-      accessibilityLabel="Tether">
+      accessibilityLabel="Medusa">
       {coil.map((seg, i) => {
         const isHead = i === 0;
         const dotSize = headSize - (headSize - tailSize) * seg.t;

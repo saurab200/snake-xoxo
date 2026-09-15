@@ -57,14 +57,14 @@ export default function AuthWelcomeScreen() {
         keyboardShouldPersistTaps="handled">
         <View style={styles.hero}>
           <SnakeMark size={86} />
-          <Text style={styles.wordmark}>TETHER</Text>
-          <Text style={styles.tagline}>Focus without distractions.</Text>
+          <Text style={styles.wordmark}>MEDUSA</Text>
+          <Text style={styles.tagline}>Welcome to focus Maxxing</Text>
         </View>
 
         <View style={styles.pitch}>
           <Text style={styles.pitchTitle}>Own your attention.</Text>
           <Text style={styles.pitchBody}>
-            Pull the snake to start a focus session. Tether blocks the apps that
+            Pull the snake to start a focus session. Medusa blocks the apps that
             pull you away, and rewards the time you keep.
           </Text>
         </View>
@@ -95,7 +95,7 @@ export default function AuthWelcomeScreen() {
             onPress={submit}
             disabled={busy || !ready}
             accessibilityRole="button"
-            accessibilityLabel="Continue into Tether">
+            accessibilityLabel="Continue into Medusa">
             {busy ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (

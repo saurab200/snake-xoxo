@@ -4,7 +4,7 @@ You are implementing the slice owned by **Person 3**, referred to throughout thi
 repository as **Person C**. Both names mean the same person: the code comments and
 the README say "Person C", the team says "Person 3".
 
-The project is Tether, an Android focus app. The repository already contains a
+The project is Medusa, an Android focus app. The repository already contains a
 working skeleton — your job is to finish and harden one vertical slice of it, not
 to build the app from scratch.
 
@@ -37,7 +37,7 @@ leftover.
 
 - Run Task 0 with a **real Canvas token** — the fetch path has never been exercised
   against a live Canvas instance. This is the highest-value remaining check.
-- Task 1's acceptance test: swipe Tether from Recents, open a trigger app, confirm
+- Task 1's acceptance test: swipe Medusa from Recents, open a trigger app, confirm
   the widget still appears.
 - Task 5 remainder: dragging, and `Linking.openURL` for todo items (drop it if it
   does not work from an overlay — it has no Activity context).
@@ -47,11 +47,11 @@ leftover.
 
 ## 1. Mission
 
-Tether blocks distracting apps during a focus session. **You own the other half of
+Medusa blocks distracting apps during a focus session. **You own the other half of
 that bargain:** surfacing the productivity tools the user *should* be looking at.
 
 Concretely: a small floating card in the corner of the screen showing the user's
-Canvas LMS todo list. It appears over other apps, not just inside Tether.
+Canvas LMS todo list. It appears over other apps, not just inside Medusa.
 
 Your slice is what turns the product from "an app blocker" into "a focus system".
 It is also the most extensible part — the plugin interface is designed so a second
@@ -307,8 +307,8 @@ persists. That is what makes this work.
 adb shell am kill com.tether   # does NOT work -- foreground service restarts it
 ```
 Instead test properly:
-1. Open Tether, then press Home.
-2. Open Recents and swipe Tether away (destroys the activity, keeps the service).
+1. Open Medusa, then press Home.
+2. Open Recents and swipe Medusa away (destroys the activity, keeps the service).
 3. Open the Canvas app.
 4. **The widget must still appear.** With the bug present it will not.
 
@@ -470,7 +470,7 @@ npx tsc --noEmit
 |---|---|---|
 | Widget never appears over other apps | W1 — listener died with the activity | Task 1 |
 | Widget never appears at all | Accessibility service off, so no foreground events | Person 2's slice — check `adb shell settings get secure enabled_accessibility_services` |
-| Widget appears only inside Tether | Same as W1 | Task 1 |
+| Widget appears only inside Medusa | Same as W1 | Task 1 |
 | Infinite spinner | No fetch timeout | Task 2 |
 | `401` from Canvas | Bad or expired token | Regenerate in Canvas settings |
 | `404` from Canvas | Wrong host, or a path in the host field | Host only: `https://school.instructure.com` |

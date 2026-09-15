@@ -1,4 +1,4 @@
-# Tether — Session Handoff
+# Medusa — Session Handoff
 
 Everything built so far, and how to pick it back up.
 
@@ -10,7 +10,7 @@ Current state: branch **`feature/taskui`**, clean and pushed.
 
 ---
 
-## 1. What Tether is
+## 1. What Medusa is
 
 An Android focus app. A green snake lives in the top bezel. Pull its tail down —
 how far you pull sets the session length. During a session the apps you blocked
@@ -58,7 +58,7 @@ React Native 0.75.4 + a Kotlin layer. Android only.
   refresh from Canvas cannot resurrect what you cleared.
 - Canvas assignments and your own reminders land in one list.
 - **Reminders**: add a task with a due date and lock duration; when it falls due
-  Tether goes into a **total lockout** — blocked apps close on sight, no exit.
+  Medusa goes into a **total lockout** — blocked apps close on sight, no exit.
 
 ### Gamification (Person 4 / D — Ali)
 
@@ -186,7 +186,7 @@ of disappearing.
   and makes every animation look broken. `scripts/emulator.sh` already does this.
 - **Never set `newArchEnabled=true`.** All six overlays would silently render
   nothing.
-- **JS timers and animation callbacks do not fire while Tether is
+- **JS timers and animation callbacks do not fire while Medusa is
   backgrounded** — which is whenever the overlays are actually on screen. Use
   `Overlay.setLayoutAfter` for deferred resizes. HANDOFF.md §10.
 
@@ -211,7 +211,8 @@ of disappearing.
 Paste this as the first message:
 
 ```
-Continuing Tether, an Android focus app (React Native 0.75.4 + Kotlin).
+Continuing Medusa, an Android focus app (React Native 0.75.4 + Kotlin).
+The Android package is still com.tether and must stay that way -- see §10.
 Repo: /Users/hunter/snake xoxo — branch feature/taskui, clean and pushed.
 That branch has all four slices including the gamification merge; main
 does not.
@@ -219,7 +220,7 @@ does not.
 Read HANDOFF.md first: architecture, the decisions not to undo (most
 important: newArchEnabled must stay false or all six overlays silently
 render nothing; and deferred overlay resizes must be timed natively,
-because JS timers do not fire while Tether is backgrounded), plus known
+because JS timers do not fire while Medusa is backgrounded), plus known
 edges.
 
 Environment is already set up on this machine — emulator, Device Owner,
@@ -259,12 +260,19 @@ Owner app cannot be force-stopped if something goes sideways on stage.
 
 ## 10. Naming
 
-"Tether" came from the original spec doc, not a deliberate choice, and collides
-with Android's own *tethering* — two system packages and an APEX module use the
-word, so `adb logcat | grep -i tether` returns system noise. Use
-`grep "com.tether"`.
+The app is **Medusa** to the user and `com.tether` to Android. Only the visible
+strings were renamed: launcher label, sign-in wordmark and tagline, Focus tab
+title, the foreground-service notification, the accessibility service label and
+description, and doc prose.
 
-Renaming touches `applicationId`, `namespace`, 20 Kotlin package declarations,
-the accessibility service ID, the Device Owner component name, the emulator
-script and all four briefs — and invalidates the Device Owner provisioning.
-Cheap after the demo, expensive during it.
+`applicationId`, `namespace`, the Kotlin package declarations, the accessibility
+service ID and the Device Owner component `com.tether/.admin.TetherDeviceAdmin`
+all keep the old word on purpose — changing the applicationId invalidates the
+Device Owner provisioning, revokes the accessibility grant, and wipes the
+SharedPreferences holding XP, level, blocklist and completed tasks. So take
+every `com.tether` in this repo literally; the adb commands above depend on it.
+
+The old name still collides with Android's own *tethering* — two system packages
+and an APEX module use the word, so `adb logcat | grep -i tether` returns system
+noise. Use `grep "com.tether"`. Renaming the package is cheap after the demo and
+expensive during it. See HANDOFF.md §9.

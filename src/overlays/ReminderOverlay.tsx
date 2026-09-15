@@ -85,7 +85,7 @@ export default function ReminderOverlay() {
         </View>
 
         <Text style={styles.caption}>
-          When this falls due, Tether locks you out: every blocked app closes on
+          When this falls due, Medusa locks you out: every blocked app closes on
           sight.
         </Text>
 

@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Tether — Session Handoff</title>
+<title>Medusa — Session Handoff</title>
 <style>
   @page { size: A4; margin: 16mm 15mm; }
   * { box-sizing: border-box; }
@@ -53,7 +53,7 @@
 </head>
 <body>
 
-<h1>Tether — Session Handoff</h1>
+<h1>Medusa — Session Handoff</h1>
 <div class="sub">
   Resuming on a different machine &nbsp;·&nbsp; repo at <code>c49d141</code> &nbsp;·&nbsp; 26 commits
 </div>
@@ -68,7 +68,7 @@
 <h2>1 · Where we left off</h2>
 
 <p>
-  Tether is an Android focus app. A green snake lives in the top bezel; pull its
+  Medusa is an Android focus app. A green snake lives in the top bezel; pull its
   tail down and how far you pull sets the session length. During a session the
   apps you blocked <strong>disappear from the launcher entirely</strong>, and a
   task card shows what to work on instead.
@@ -240,7 +240,7 @@ adb shell dpm list-owners
 
 <p>Paste this as the first message, after cloning:</p>
 
-<pre><code>I'm continuing work on Tether, an Android focus app in React Native 0.75.4
+<pre><code>I'm continuing work on Medusa, an Android focus app in React Native 0.75.4
 plus a Kotlin layer. The repo is cloned here and is at commit c49d141.
 
 Read HANDOFF.md first — it covers what works, what is unverified, and five
@@ -262,16 +262,26 @@ Next up, in priority order:
 <h2>9 · Naming</h2>
 
 <p>
-  “Tether” came from the original spec doc, not a deliberate choice, and it
-  collides with Android's own <em>tethering</em> — two system packages and an
-  APEX module use the word, so <code>adb logcat | grep -i tether</code> returns
-  system noise. Use <code>grep "com.tether"</code>.
+  The app is <strong>Medusa</strong> to the user and <code>com.tether</code> to
+  Android. Only the visible strings were renamed: launcher label, sign-in
+  wordmark and tagline, Focus tab title, the foreground-service notification,
+  and the accessibility service label and description.
 </p>
 <p>
-  Renaming touches <code>applicationId</code>, <code>namespace</code>, 20 Kotlin
-  package declarations, the accessibility service ID, the Device Owner component
-  name, the emulator script and all four briefs — and invalidates the Device
-  Owner provisioning. Cheap after the demo, expensive during it.
+  <code>applicationId</code>, <code>namespace</code>, the Kotlin package
+  declarations, the accessibility service ID and the Device Owner component
+  <code>com.tether/.admin.TetherDeviceAdmin</code> all keep the old word on
+  purpose — changing the applicationId invalidates the Device Owner
+  provisioning, revokes the accessibility grant, and wipes the SharedPreferences
+  holding XP, level, blocklist and completed tasks. Take every
+  <code>com.tether</code> on this page literally.
+</p>
+<p>
+  The old name still collides with Android's own <em>tethering</em> — two system
+  packages and an APEX module use the word, so
+  <code>adb logcat | grep -i tether</code> returns system noise. Use
+  <code>grep "com.tether"</code>. Renaming the package is cheap after the demo
+  and expensive during it.
 </p>
 
 <div class="foot">

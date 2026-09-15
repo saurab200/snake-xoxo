@@ -1,4 +1,4 @@
-# Tether — Handoff
+# Medusa — Handoff
 
 State of the project on **`feature/taskui`**. Written for whoever picks this up next.
 
@@ -75,7 +75,7 @@ Exact alarms need `SCHEDULE_EXACT_ALARM` on Android 12+, a restricted permission
 with a Play policy attached. The foreground service already ticks every second.
 
 The trade-off, which is fine: **a reminder only fires while the service is
-alive.** A lockout is meaningless if Tether is not running anyway.
+alive.** A lockout is meaningless if Medusa is not running anyway.
 
 ### No AsyncStorage
 
@@ -95,7 +95,7 @@ currently has no caller -- every resize turned out to be immediate once the
 snake stopped waiting on an animation -- but it is kept as the other half of the
 same rule.) See §10 for the
 full story; the short version is that the overlays are on screen precisely when
-Tether is backgrounded, and in that state RN delivers neither JS timer callbacks
+Medusa is backgrounded, and in that state RN delivers neither JS timer callbacks
 nor the completion callbacks of native-driver animations. Anything that must
 happen after a delay, or when an animation ends, has to be timed by a native
 `Handler`.
@@ -128,7 +128,7 @@ BOOT / app launch
 index.js (module scope, outlives every activity)
   ├─ initializeGamification()  hydrates points; installs the award listener
   ├─ startSnake()              pins the snake, the XP bar and the X;
-  │                            hides them while Tether is foreground
+  │                            hides them while Medusa is foreground
   └─ startWidgetTrigger()      foreground-app events + task panel on session start
 
 PULL THE TAIL
@@ -286,15 +286,38 @@ Owner app cannot be force-stopped if something goes wrong on stage.
 
 ## 9. Naming
 
-"Tether" came from the original spec doc (`snake.md`), not from a deliberate
-choice. It collides with Android's own "tethering" — there are two system
-packages and an APEX module using the word, so `adb logcat | grep -i tether`
-returns system noise. Use `grep "com.tether"`.
+The app is **Medusa** to the user and `com.tether` to Android. That split is
+deliberate, and the second half of it is load-bearing.
 
-Renaming touches `applicationId`, `namespace`, 20 Kotlin package declarations,
-the accessibility `SERVICE_ID`, the Device Owner component name, the emulator
-script and all four briefs — and invalidates the Device Owner provisioning. Cheap
-after the demo, expensive during it.
+What was renamed is every string a user can read: the launcher label
+(`app_name`), the wordmark and tagline on the sign-in screen, the Focus tab
+title, the foreground-service notification title, the accessibility service
+label and description shown in Settings, and the prose in these docs.
+
+What was **not** renamed, and must not be: `applicationId`, `namespace`, the 20
+Kotlin package declarations, the accessibility `SERVICE_ID`, and the Device
+Owner component `com.tether/.admin.TetherDeviceAdmin`. Changing the
+applicationId invalidates the Device Owner provisioning — and a Device Owner
+cannot be force-stopped or cleanly uninstalled without
+`dpm remove-active-admin` — revokes the accessibility grant, and wipes the
+SharedPreferences holding XP, level, blocklist and completed tasks. The
+internal Kotlin names (`TetherService`, `TetherPackage`, `TetherStorage`, the
+`tether:` event prefixes) stayed for the same reason in miniature: nobody sees
+them, and a `TetherStorage` key rename would orphan the user's saved points.
+
+`app.json` looks inconsistent on purpose: `displayName` is Medusa, `name` is
+still `Tether`. `name` is the React Native root component name, tied to
+`MainActivity.getMainComponentName()` and to `AppRegistry.registerComponent()`
+in `index.js`. Change one of those three without the other two and the app
+boots to a blank screen. It is invisible to users, so it was left alone.
+
+So every `com.tether` in this repo is a real identifier, not a leftover. The
+original name came from the spec doc (`snake.md`), and it still collides with
+Android's own "tethering" — two system packages and an APEX module use the
+word, so `adb logcat | grep -i tether` returns system noise. Use
+`grep "com.tether"`.
+
+Renaming the package itself is cheap after the demo and expensive during it.
 
 ---
 
@@ -347,7 +370,7 @@ Neither ever ran. The window stayed at its full drag size from the first pull
 onward, forever, across sessions and reboots — a 170x440dp invisible slab over
 the launcher, with the `+` pill clipped off its right edge.
 
-**Why:** the overlay is on screen exactly when Tether is *backgrounded*. In that
+**Why:** the overlay is on screen exactly when Medusa is *backgrounded*. In that
 state React Native delivers neither JS timer callbacks nor the completion
 callbacks of `useNativeDriver` animations. The animation itself runs — you can
 watch the snake crawl home — but nothing downstream of it fires. A previous fix
@@ -378,7 +401,7 @@ That is why `SnakeAtRest` draws the settled states as plain Views instead:
 > Everything after the release is drawn, not animated to.
 
 The coil-and-crawl-home flourish is gone rather than fixed. It could only ever
-play while Tether was in the foreground, and the overlays are hidden then, so
+play while Medusa was in the foreground, and the overlays are hidden then, so
 there was no state in which it could be seen.
 
 The same bug was found a third time in `widgetTrigger.ts`: the task panel was
@@ -413,7 +436,7 @@ That means three things in the code, and all three have to agree:
   not hide itself, and does not call `Focus.disarm()`. The button says *Stop
   session*, which is what it does.
 
-The one thing that still hides the snake is Tether being in the foreground — the
+The one thing that still hides the snake is Medusa being in the foreground — the
 `AppState` listener in `bootstrap.ts` pulls it, the ✕ and the task card down while
 you are looking at the app itself, and puts them back when you leave. That is
 intentional: the overlay would otherwise sit on top of the app's own UI.
@@ -529,8 +552,8 @@ the imports have to go by hand.
 ### The reward card waits for a tap
 
 When a session completes over another app, `RewardOverlay` appears and stays
-until tapped (or until Tether is next opened -- it has its own AppState listener
-for that). Its 4.6s auto-dismiss is a JS timer and cannot run while Tether is
+until tapped (or until Medusa is next opened -- it has its own AppState listener
+for that). Its 4.6s auto-dismiss is a JS timer and cannot run while Medusa is
 backgrounded. Ali found this independently and designed the card to paint its
 finished state on first frame rather than fade in, which is why it appears at
 all. Left as designed; know it before demoing.

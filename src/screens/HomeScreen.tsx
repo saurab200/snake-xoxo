@@ -72,7 +72,7 @@ export default function HomeScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.root}>
-      <Text style={styles.h1}>Tether</Text>
+      <Text style={styles.h1}>Medusa</Text>
 
       <Section title="Your rewards">
         <View style={styles.pointsRow}>
@@ -145,7 +145,7 @@ export default function HomeScreen() {
           muted
         />
         <Text style={styles.hint}>
-          Android kills the timer service under battery optimisation. Find Tether
+          Android kills the timer service under battery optimisation. Find Medusa
           in the list and allow unrestricted background use.
         </Text>
         <Button label="Re-check" onPress={refreshPerms} muted />

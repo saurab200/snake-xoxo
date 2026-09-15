@@ -58,7 +58,7 @@ export default function IntegrationsScreen() {
     <ScrollView contentContainerStyle={styles.root}>
       <Text style={styles.h1}>Apps</Text>
       <Text style={styles.caption}>
-        Blocking clears the noise. These are what you clear it for — Tether
+        Blocking clears the noise. These are what you clear it for — Medusa
         pulls whatever you owe from each one into a single list.
       </Text>
 

@@ -305,7 +305,7 @@ class TetherService : Service() {
     private fun buildNotification(): Notification {
         val active = FocusSessionStore.isActive
         val builder = Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Tether")
+            .setContentTitle("Medusa")
             .setContentText(
                 when {
                     FocusSessionStore.isLockedOut() ->
