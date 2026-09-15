@@ -424,6 +424,40 @@ it can be missing from.
 
 ---
 
+## 12a. Sign-in
+
+One screen, one field: type an email, tap Continue, you are in. No password, no
+separate sign-up, no network.
+
+A password could only ever have been checked against the device it was typed on,
+which proves nothing, so it was removed along with the two screens that
+collected it (`LoginScreen`/`SignUpScreen`, recoverable from git). `isValidEmail`
+is deliberately permissive and there is **no domain allowlist**: university and
+work addresses are the expected case, but an allowlist rejects legitimate users
+and a free-provider denylist is trivially side-stepped. Neither can actually be
+enforced without a backend.
+
+`continueWithEmail()` in `src/state/authStore.ts` signs into the existing local
+account for that address if there is one -- so points survive a sign-out -- and
+otherwise creates it, deriving a display name (`ada.lovelace@uni.edu` -> "Ada
+Lovelace"). Identity lives under `auth.session` / `auth.accounts` in the same
+SharedPreferences-backed `Storage` as everything else.
+
+**The gate does not gate the app.** `index.js` is untouched: the snake, the XP
+bar, the foreground service, gamification and the reward trigger all still start
+at module scope, outside React. A signed-out user loses the tabs and nothing
+else -- a running session keeps counting and still credits points.
+
+### Do not oversell this
+
+It is not authentication and it does not make the leaderboard authentic. Anyone
+can type anyone's address, and `LeaderboardScreen` still falls back to five
+hardcoded rows when its fetch fails, which it always does. What sign-in actually
+buys is the user's own row carrying their own name. The honest framing is
+"accounts and a sign-in experience; leaderboard backend still to come."
+
+---
+
 ## 12. XP, levels and the leaderboard
 
 One number, `totalPoints`, in `src/state/gamificationStore.ts`. Everything reads
