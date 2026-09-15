@@ -13,10 +13,12 @@ import {name as appName} from './app.json';
 import BlockOverlay from './src/overlays/BlockOverlay';
 import KillSwitchOverlay from './src/overlays/KillSwitchOverlay';
 import ReminderOverlay from './src/overlays/ReminderOverlay';
+import RewardOverlay from './src/overlays/RewardOverlay';
 import SnakeOverlay from './src/overlays/SnakeOverlay';
 import WidgetOverlay from './src/overlays/WidgetOverlay';
 import {startSnake} from './src/state/bootstrap';
 import {initializeGamification} from './src/state/gamificationStore';
+import {startRewardTrigger} from './src/state/rewardTrigger';
 import {startWidgetTrigger} from './src/state/widgetTrigger';
 
 AppRegistry.registerComponent(appName, () => App);
@@ -26,6 +28,7 @@ AppRegistry.registerComponent('BlockOverlay', () => BlockOverlay);
 AppRegistry.registerComponent('WidgetOverlay', () => WidgetOverlay);
 AppRegistry.registerComponent('ReminderOverlay', () => ReminderOverlay);
 AppRegistry.registerComponent('KillSwitchOverlay', () => KillSwitchOverlay);
+AppRegistry.registerComponent('RewardOverlay', () => RewardOverlay);
 
 /**
  * Started at module scope, NOT from a React component.
@@ -45,5 +48,7 @@ AppRegistry.registerComponent('KillSwitchOverlay', () => KillSwitchOverlay);
  * initializeGamification() is idempotent, so a re-import cannot double-register.
  */
 initializeGamification();
+// Must come after initializeGamification so no award can fire before it listens.
+startRewardTrigger();
 startWidgetTrigger();
 startSnake();

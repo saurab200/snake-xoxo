@@ -45,6 +45,52 @@ export function skinById(id: string): Skin | undefined {
 }
 
 /* ------------------------------------------------------------------ */
+/* Levels                                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Flat curve, on purpose.
+ *
+ * A ramping curve is more elegant, but flat is instantly legible: one finished
+ * 25-minute session is always exactly one level. That readability matters more
+ * than elegance when someone is watching a two-minute demo, and it fills the
+ * dead stretch between skin unlocks where nothing else visibly moves.
+ *
+ * Levels are DERIVED from totalPoints, never stored -- so there is no extra
+ * persisted state, nothing to migrate, and the level can never disagree with
+ * the point total.
+ */
+export const XP_PER_LEVEL = 25;
+
+export type LevelInfo = {
+  level: number;
+  /** XP earned inside the current level. */
+  xpIntoLevel: number;
+  /** XP needed to span one level. */
+  xpForLevel: number;
+  /** XP still to earn before levelling up. */
+  xpToNext: number;
+  /** 0..1, for the progress bar. */
+  progress: number;
+};
+
+export function levelForPoints(points: number): number {
+  return Math.floor(Math.max(0, points) / XP_PER_LEVEL) + 1;
+}
+
+export function levelInfoFor(points: number): LevelInfo {
+  const safe = Math.max(0, points);
+  const xpIntoLevel = safe % XP_PER_LEVEL;
+  return {
+    level: levelForPoints(safe),
+    xpIntoLevel,
+    xpForLevel: XP_PER_LEVEL,
+    xpToNext: XP_PER_LEVEL - xpIntoLevel,
+    progress: xpIntoLevel / XP_PER_LEVEL,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* State                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -65,6 +111,33 @@ let state: GamificationState = {
 };
 
 const listeners = new Set<() => void>();
+
+/**
+ * Fired ONCE per credited session, after the points have landed.
+ *
+ * Separate from the plain state subscription because celebrating is a discrete
+ * event, not a state value: a re-render must never re-trigger it. The store
+ * stays free of UI concerns -- src/state/rewardTrigger.ts listens and shows the
+ * overlay, the same split widgetTrigger.ts uses for Person B -> Person C.
+ */
+export type AwardEvent = {
+  pointsAwarded: number;
+  totalPoints: number;
+  previousLevel: number;
+  level: number;
+  leveledUp: boolean;
+  /** Skins whose threshold this award crossed. Usually empty. */
+  unlockedSkins: Skin[];
+};
+
+const awardListeners = new Set<(e: AwardEvent) => void>();
+
+export function subscribeAward(listener: (e: AwardEvent) => void): () => void {
+  awardListeners.add(listener);
+  return () => {
+    awardListeners.delete(listener);
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /* Reads                                                               */
@@ -153,12 +226,33 @@ function awardPoints(sessionId: string, points: number): void {
   if (state.creditedSessionIds.includes(sessionId)) {
     return; // already credited this exact session -- no duplicate points
   }
+
+  const before = state.totalPoints;
+  const after = before + points;
+
   const creditedSessionIds = [...state.creditedSessionIds, sessionId].slice(
     -MAX_CREDITED_IDS,
   );
-  commit({
-    totalPoints: state.totalPoints + points,
-    creditedSessionIds,
+  commit({totalPoints: after, creditedSessionIds});
+
+  const event: AwardEvent = {
+    pointsAwarded: points,
+    totalPoints: after,
+    previousLevel: levelForPoints(before),
+    level: levelForPoints(after),
+    leveledUp: levelForPoints(after) > levelForPoints(before),
+    // Thresholds crossed by this award, so the overlay can call them out.
+    unlockedSkins: SKINS.filter(
+      s => s.requiredPoints > before && s.requiredPoints <= after,
+    ),
+  };
+
+  awardListeners.forEach(l => {
+    try {
+      l(event);
+    } catch {
+      /* a failing celebration must never cost the user their points */
+    }
   });
 }
 
@@ -298,13 +392,14 @@ export function initializeGamification(): void {
 /* React hook                                                          */
 /* ------------------------------------------------------------------ */
 
-export type UseGamification = GamificationState & {
-  skins: Skin[];
-  activeSkinObj: Skin;
-  activeSkinColor: string;
-  isSkinUnlocked: (id: string) => boolean;
-  setActiveSkin: (id: string) => boolean;
-};
+export type UseGamification = GamificationState &
+  LevelInfo & {
+    skins: Skin[];
+    activeSkinObj: Skin;
+    activeSkinColor: string;
+    isSkinUnlocked: (id: string) => boolean;
+    setActiveSkin: (id: string) => boolean;
+  };
 
 export function useGamification(): UseGamification {
   const [snap, setSnap] = useState<GamificationState>(getGamificationState());
@@ -322,6 +417,7 @@ export function useGamification(): UseGamification {
 
   return {
     ...snap,
+    ...levelInfoFor(snap.totalPoints),
     skins: SKINS,
     activeSkinObj,
     activeSkinColor: activeSkinObj.color,
