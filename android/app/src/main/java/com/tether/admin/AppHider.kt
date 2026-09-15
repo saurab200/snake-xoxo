@@ -3,6 +3,10 @@ package com.tether.admin
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.provider.Settings
+import android.provider.Telephony
+import android.telecom.TelecomManager
 import android.util.Log
 import com.tether.core.FocusSessionStore
 import com.tether.core.Prefs
@@ -23,6 +27,66 @@ object AppHider {
     /** Avoids re-issuing identical binder calls on every tick. */
     @Volatile
     private var lastAppliedHidden: Boolean? = null
+
+    /** Resolved once per process; the set cannot change while we are running. */
+    @Volatile
+    private var protectedCache: Set<String>? = null
+
+    /**
+     * Packages that must NEVER be hidden, however the blocklist is configured.
+     *
+     * Hiding these does not make someone focus, it bricks their phone: no home
+     * screen to return to, no dialer for an emergency, no Settings to undo it,
+     * and with Device Owner set the app cannot even be force-stopped. On the
+     * emulator a blocklist that had every app ticked took the device down to a
+     * single launchable app, which is exactly how this would play out on
+     * hardware.
+     *
+     * Resolved from the system rather than hardcoded, because the launcher,
+     * dialer and keyboard differ per device and per user choice.
+     */
+    fun protectedPackages(context: Context): Set<String> {
+        protectedCache?.let { return it }
+
+        val pm = context.packageManager
+        val out = mutableSetOf(context.packageName)
+
+        fun add(pkg: String?) {
+            // "android" is the intent resolver, not a real app.
+            if (!pkg.isNullOrBlank() && pkg != "android") out.add(pkg)
+        }
+
+        try {
+            // EVERY home-capable app, not just the current default -- switching
+            // launcher must not strand the user on a hidden one.
+            pm.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
+                0,
+            ).forEach { add(it.activityInfo?.packageName) }
+
+            add(pm.resolveActivity(Intent(Intent.ACTION_DIAL), 0)?.activityInfo?.packageName)
+            add(
+                (context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager)
+                    ?.defaultDialerPackage,
+            )
+            add(
+                pm.resolveActivity(Intent(Settings.ACTION_SETTINGS), 0)
+                    ?.activityInfo?.packageName,
+            )
+            add(Telephony.Sms.getDefaultSmsPackage(context))
+            add(
+                Settings.Secure.getString(
+                    context.contentResolver,
+                    Settings.Secure.DEFAULT_INPUT_METHOD,
+                )?.substringBefore('/'),
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "could not resolve every protected package", e)
+        }
+
+        protectedCache = out
+        return out
+    }
 
     private fun admin(context: Context) =
         ComponentName(context.packageName, TetherDeviceAdmin::class.java.name)
@@ -72,9 +136,15 @@ object AppHider {
     private fun hide(context: Context, packages: Set<String>) {
         if (packages.isEmpty()) return
         val hidden = Prefs.getStringSet(context, KEY_HIDDEN).toMutableSet()
+        val protectedPkgs = protectedPackages(context)
 
         packages.forEach { pkg ->
-            if (pkg == context.packageName) return@forEach // never hide ourselves
+            if (pkg in protectedPkgs) {
+                // Refused, not failed: blocking the launcher or dialer would
+                // leave no way back. See protectedPackages().
+                Log.w(TAG, "refusing to hide protected package $pkg")
+                return@forEach
+            }
             try {
                 // Record BEFORE hiding: a crash between the two must leave a
                 // package we can still restore, not one stranded as hidden.

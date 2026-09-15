@@ -177,6 +177,13 @@ export const Blocking = {
    */
   isDeviceOwner: (): Promise<boolean> => TetherBlocking.isDeviceOwner(),
   getHiddenCount: (): Promise<number> => TetherBlocking.getHiddenCount(),
+
+  /**
+   * Packages Tether refuses to hide -- launcher, dialer, Settings, keyboard.
+   * Hiding these would leave no way back into the device.
+   */
+  getProtectedPackages: (): Promise<string[]> =>
+    TetherBlocking.getProtectedPackages(),
   restoreHiddenApps: (): Promise<boolean> =>
     TetherBlocking.restoreHiddenApps(),
 };
