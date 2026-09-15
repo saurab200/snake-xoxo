@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useRef, useState} from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -6,27 +6,39 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import AuthTextInput from '../components/AuthTextInput';
 import SnakeMark from '../components/SnakeMark';
-import {continueWithEmail, isValidEmail} from '../state/authStore';
+import {
+  continueWithEmail,
+  fallbackNameFor,
+  isValidEmail,
+} from '../state/authStore';
 
 /**
- * The whole sign-in experience: one field, one button.
+ * The whole sign-in experience: two fields, one button.
  *
  * There is no password, no separate sign-up, and no confirmation step. Tether
  * has no backend, so a password could only ever be checked against the device
  * it was typed on -- which proves nothing while costing the user a form. The
- * email is what a profile and a leaderboard row hang on, so that is all we ask
- * for. University and work addresses are the expected case; personal ones are
- * accepted too (see isValidEmail).
+ * email is what a profile and a leaderboard row hang on, so that is the only
+ * thing we require. University and work addresses are the expected case;
+ * personal ones are accepted too (see isValidEmail).
+ *
+ * Name is optional on purpose. It is what the leaderboard shows, and guessing
+ * it from the address gets "Saurab200" often enough to be worth asking -- but
+ * requiring it puts a second thing between someone at a demo and the app, and
+ * the guess is good enough to fall back on.
  */
 export default function AuthWelcomeScreen() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const emailRef = useRef<TextInput>(null);
 
   const ready = isValidEmail(email);
 
@@ -37,7 +49,7 @@ export default function AuthWelcomeScreen() {
     setError(null);
     setBusy(true);
     try {
-      const result = await continueWithEmail(email);
+      const result = await continueWithEmail(email, name);
       if (!result.ok) {
         setError(result.message);
       }
@@ -71,6 +83,26 @@ export default function AuthWelcomeScreen() {
 
         <View style={styles.actions}>
           <AuthTextInput
+            label="Name"
+            // Once the address parses, the placeholder is the exact name we
+            // would fall back to -- so leaving the field alone reads as a
+            // choice rather than as something unfinished.
+            placeholder={ready ? fallbackNameFor(email) : 'Optional'}
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+            autoCorrect={false}
+            textContentType="name"
+            returnKeyType="next"
+            onSubmitEditing={() => emailRef.current?.focus()}
+            // The email field is the one that gates Continue, so the keyboard
+            // should move there rather than submitting a half-filled form.
+            blurOnSubmit={false}
+            editable={!busy}
+          />
+
+          <AuthTextInput
+            ref={emailRef}
             label="Email"
             placeholder="you@university.edu"
             value={email}
@@ -104,7 +136,9 @@ export default function AuthWelcomeScreen() {
           </TouchableOpacity>
 
           <Text style={styles.fineprint}>
-            Your email stays on this device. No password, no verification email.
+            Your name is what the leaderboard shows, and only the email is
+            required. Both stay on this device: no password, no verification
+            email.
           </Text>
         </View>
       </ScrollView>

@@ -62,10 +62,13 @@ export function normalizeEmail(email: string): string {
 }
 
 /**
- * A display name from the address, since we never ask for one.
+ * A display name from the address, for when the user does not give us one.
  *
  *   ada.lovelace@uni.edu  ->  Ada Lovelace
  *   saurab200@gmail.com   ->  Saurab200
+ *
+ * A decent guess, and wrong for plenty of addresses -- which is why the sign-in
+ * screen offers a Name field and only falls back to this when it is left blank.
  *
  * Only ever cosmetic -- it is what the leaderboard shows. The email remains the
  * identity.
@@ -77,6 +80,18 @@ export function displayNameFor(email: string): string {
     .filter(Boolean)
     .map(w => w.charAt(0).toUpperCase() + w.slice(1));
   return words.join(' ') || 'You';
+}
+
+/**
+ * Long enough for anyone's real name, short enough that a paste accident does
+ * not become a leaderboard row. There is no backend to satisfy, so this is the
+ * only limit.
+ */
+const MAX_NAME_LENGTH = 60;
+
+/** Trimmed and capped; empty means "the user left the field blank". */
+export function normalizeName(name: string): string {
+  return name.trim().slice(0, MAX_NAME_LENGTH);
 }
 
 /**
@@ -160,6 +175,19 @@ function rememberAccount(user: AuthUser): void {
   }
 }
 
+/**
+ * The name this address would end up with if the Name field is left blank: the
+ * stored one for an account this device has seen, otherwise a guess from the
+ * address.
+ *
+ * Exported so the sign-in screen can show it as the Name placeholder and be
+ * telling the truth -- a returning user keeps the name they already chose, not
+ * whatever displayNameFor() would have made up.
+ */
+export function fallbackNameFor(email: string): string {
+  return findAccount(email)?.name ?? displayNameFor(email);
+}
+
 const settle = () => new Promise<void>(r => setTimeout(r, SETTLE_MS));
 
 /* ------------------------------------------------------------------ */
@@ -237,24 +265,35 @@ async function signIn(user: AuthUser): Promise<void> {
  * The one way in: an email, and you are signed in.
  *
  * Signs into the existing account for that address if this device has seen it
- * before, so points and profile survive a sign-out; otherwise creates one with
- * a name derived from the address. There is no separate sign-up and log-in
- * because without a server there is nothing to tell them apart.
+ * before, so points and profile survive a sign-out; otherwise creates one.
+ * There is no separate sign-up and log-in because without a server there is
+ * nothing to tell them apart.
+ *
+ * `name` is optional -- the screen never makes the user type one. Blank falls
+ * back to the returning account's stored name, or to displayNameFor(email) for
+ * a first sign-in. A name that IS typed always wins, including for a returning
+ * user: renaming yourself should not require a way to clear local storage, and
+ * only the name changes -- the account, and so the points, are the same one.
  *
  * REPLACE THIS to move to a real backend -- verify the address, then call
  * signIn() with the profile the server returns.
  */
-export async function continueWithEmail(email: string): Promise<AuthResult> {
+export async function continueWithEmail(
+  email: string,
+  name = '',
+): Promise<AuthResult> {
   await settle();
 
   if (!isValidEmail(email)) {
     return {ok: false, message: 'Please enter a valid email address.'};
   }
 
-  const existing = findAccount(email);
-  await signIn(
-    existing ?? {name: displayNameFor(email), email: normalizeEmail(email)},
-  );
+  const typed = normalizeName(name);
+
+  await signIn({
+    name: typed || fallbackNameFor(email),
+    email: normalizeEmail(email),
+  });
   return {ok: true};
 }
 

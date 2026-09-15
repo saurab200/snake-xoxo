@@ -449,8 +449,8 @@ it can be missing from.
 
 ## 12a. Sign-in
 
-One screen, one field: type an email, tap Continue, you are in. No password, no
-separate sign-up, no network.
+One screen, two fields: type a name and an email, tap Continue, you are in. Only
+the email is required. No password, no separate sign-up, no network.
 
 A password could only ever have been checked against the device it was typed on,
 which proves nothing, so it was removed along with the two screens that
@@ -460,11 +460,17 @@ work addresses are the expected case, but an allowlist rejects legitimate users
 and a free-provider denylist is trivially side-stepped. Neither can actually be
 enforced without a backend.
 
-`continueWithEmail()` in `src/state/authStore.ts` signs into the existing local
-account for that address if there is one -- so points survive a sign-out -- and
-otherwise creates it, deriving a display name (`ada.lovelace@uni.edu` -> "Ada
-Lovelace"). Identity lives under `auth.session` / `auth.accounts` in the same
-SharedPreferences-backed `Storage` as everything else.
+`continueWithEmail(email, name?)` in `src/state/authStore.ts` signs into the
+existing local account for that address if there is one -- so points survive a
+sign-out -- and otherwise creates it. The Name field is optional because it is
+the one thing standing between a judge and the app at a demo: blank keeps a
+returning account's stored name, or for a first sign-in derives one from the
+address (`ada.lovelace@uni.edu` -> "Ada Lovelace", but also
+`saurab200@gmail.com` -> "Saurab200", which is why we ask). A name that IS typed
+always wins and overwrites the stored one -- only the name changes, so the
+account and its points are untouched. Identity lives under `auth.session` /
+`auth.accounts` in the same SharedPreferences-backed `Storage` as everything
+else.
 
 **The gate does not gate the app.** `index.js` is untouched: the snake, the XP
 bar, the foreground service, gamification and the reward trigger all still start
