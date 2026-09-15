@@ -61,10 +61,6 @@ export type PermissionStatus = {
 export const Focus = {
   /** Start the foreground service. Call after permissions are granted. */
   arm: (): Promise<boolean> => TetherFocus.arm(),
-  disarm: (): Promise<boolean> => TetherFocus.disarm(),
-
-  /** False after the kill switch, until the user explicitly brings it back. */
-  isArmed: (): Promise<boolean> => TetherFocus.isArmed(),
 
   startSession: (minutes: number, blocklist: string[]): Promise<FocusState> =>
     TetherFocus.startSession(minutes, blocklist),
@@ -122,6 +118,22 @@ export const Overlay = {
   /** Resize/move without remounting React -- component state survives. */
   setLayout: (name: string, options: OverlayOptions): Promise<boolean> =>
     TetherOverlay.setLayout(name, options),
+
+  /**
+   * Resize once `delayMs` has passed, timed by the native main looper.
+   *
+   * Use this instead of `setTimeout(() => setLayout(...))` for anything that
+   * has to happen when an animation ends. Overlays are on screen precisely when
+   * Tether is backgrounded, and JS timers and native-driver animation callbacks
+   * both stop being delivered then -- the resize would simply never happen.
+   *
+   * A later setLayout, setLayoutAfter or hide on the same overlay cancels it.
+   */
+  setLayoutAfter: (
+    name: string,
+    options: OverlayOptions,
+    delayMs: number,
+  ): Promise<boolean> => TetherOverlay.setLayoutAfter(name, options, delayMs),
 
   update: (name: string, props: Record<string, unknown>): Promise<boolean> =>
     TetherOverlay.update(name, props),

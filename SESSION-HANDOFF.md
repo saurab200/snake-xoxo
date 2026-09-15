@@ -2,7 +2,7 @@
 
 Everything built so far, and how to pick it back up.
 
-Current state: branch **`feature/taskui`** at `8b2e689`, clean and pushed.
+Current state: branch **`feature/taskui`**, clean and pushed.
 
 - [HANDOFF.md](HANDOFF.md) — the code: architecture, decisions not to undo, known edges
 - [README.md](README.md) — setup and per-slice file ownership
@@ -68,8 +68,9 @@ React Native 0.75.4 + a Kotlin layer. Android only.
 ### Cross-cutting
 
 - **Kill switch** — a ✕ in the top-right. Two taps stops the session, any
-  lockout, every overlay and the service, from anywhere. It stays stopped until
-  "Re-pin snake".
+  lockout and the task card, from anywhere. It does **not** remove the snake:
+  the snake is a permanent fixture from install onward, through reboots. See
+  HANDOFF.md §11.
 
 ---
 
@@ -105,7 +106,9 @@ reading the result.
 | Task card + due-date grouping | Verified |
 | Integrations catalogue | Verified |
 | Points, dedup, skins tinting the snake | Verified after the merge |
-| Kill switch, including staying stopped | Verified |
+| Kill switch: stops the session, leaves the snake | Verified |
+| Snake returns after a reboot, app never opened | Verified |
+| Overlay window resizes across pull / session / stop | Verified, 3 cycles |
 | **Canvas against a live instance** | **Never tested** |
 | **Haptics** | **Never felt** — emulator has no vibrator |
 | **Leaderboard network path** | Falls back to mock data silently by design |
@@ -122,8 +125,9 @@ cd "/Users/hunter/snake xoxo"
 git checkout feature/taskui
 ```
 
-If the snake is not on screen, the kill switch left it disarmed: open Tether →
-Focus tab → **Re-pin snake**.
+The snake should already be on screen — it is pinned from install onward and
+survives reboots. If it is missing, the overlay permission was probably revoked;
+grant it and use Focus tab → **Re-pin snake**.
 
 ### Resuming on a DIFFERENT machine
 
@@ -165,6 +169,9 @@ of disappearing.
   and makes every animation look broken. `scripts/emulator.sh` already does this.
 - **Never set `newArchEnabled=true`.** All six overlays would silently render
   nothing.
+- **JS timers and animation callbacks do not fire while Tether is
+  backgrounded** — which is whenever the overlays are actually on screen. Use
+  `Overlay.setLayoutAfter` for deferred resizes. HANDOFF.md §10.
 
 ---
 
@@ -188,17 +195,19 @@ Paste this as the first message:
 
 ```
 Continuing Tether, an Android focus app (React Native 0.75.4 + Kotlin).
-Repo: /Users/hunter/snake xoxo — branch feature/taskui at 8b2e689, clean
-and pushed. That branch has all four slices including the gamification
-merge; main does not.
+Repo: /Users/hunter/snake xoxo — branch feature/taskui, clean and pushed.
+That branch has all four slices including the gamification merge; main
+does not.
 
-Read HANDOFF.md first: architecture, five decisions not to undo (most
+Read HANDOFF.md first: architecture, the decisions not to undo (most
 important: newArchEnabled must stay false or all six overlays silently
-render nothing), and known edges.
+render nothing; and deferred overlay resizes must be timed natively,
+because JS timers do not fire while Tether is backgrounded), plus known
+edges.
 
 Environment is already set up on this machine — emulator, Device Owner,
-accessibility grant. If the snake is not on screen, the kill switch left
-it disarmed: Focus tab → Re-pin snake.
+accessibility grant. The snake is pinned permanently and survives
+reboots; if it is missing, check the overlay permission.
 
 Next up:
   1. Test the Canvas connector against a real instance — it has never run
@@ -219,7 +228,8 @@ Next up:
 5. **Open YouTube** — the icon is *gone from the launcher*. Not blocked: absent.
 6. **Finish a session** → points land, and a skin can be equipped to recolour the
    snake.
-7. **Tap the ✕ twice** — everything stops, and stays stopped.
+7. **Tap the ✕ twice** — the session stops and the blocked apps come back. The
+   snake stays in the bezel, where it always is.
 
 Record a backup video. Accessibility permissions are flaky live, and a Device
 Owner app cannot be force-stopped if something goes sideways on stage.

@@ -23,9 +23,8 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        // Respect an explicit close: the kill switch disarms, and staying shut
-        // through a reboot is the whole point of "stop everything".
-        if (!Prefs.isArmed(context)) return
+        // No armed check: the snake is meant to be on screen from install
+        // onward, so a reboot always brings it back.
 
         try {
             TetherService.start(context)

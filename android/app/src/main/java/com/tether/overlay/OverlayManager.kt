@@ -35,6 +35,15 @@ object OverlayManager {
     private val params = mutableMapOf<String, WindowManager.LayoutParams>()
 
     /**
+     * Resizes scheduled for later by setLayoutAfter, one per overlay.
+     *
+     * Kept so an immediate setLayout, a hide, or a second schedule can cancel a
+     * pending one -- otherwise a stale resize could fire in the middle of the
+     * next gesture and shrink the window out from under it.
+     */
+    private val pendingLayouts = mutableMapOf<String, Runnable>()
+
+    /**
      * Overlays that must stay above every other overlay.
      *
      * Window z-order among TYPE_APPLICATION_OVERLAY windows is add-order, so the
@@ -97,14 +106,56 @@ object OverlayManager {
     fun setLayout(context: Context, name: String, config: Config) {
         val app = context.applicationContext
         main.post {
-            val view = views[name] ?: return@post
-            try {
-                val lp = layoutParams(app, config)
-                params[name] = lp
-                windowManager(app).updateViewLayout(view, lp)
-            } catch (t: Throwable) {
-                Log.e(TAG, "failed to relayout overlay $name", t)
+            cancelPending(name) // an explicit resize beats anything scheduled
+            applyLayout(app, name, config)
+        }
+    }
+
+    /**
+     * Resize LATER, from the native main looper.
+     *
+     * JS cannot be trusted to do this itself. While Tether is backgrounded --
+     * which is the normal case for every overlay -- RN's timers and the
+     * completion callbacks of native-driver animations are not delivered, so a
+     * `setTimeout` scheduled to shrink a window after an animation may never
+     * run. The snake's drag window is 170x440dp, so losing that callback strands
+     * a large invisible slab over the launcher and clips the session pills.
+     *
+     * This Handler is the service's own main looper and keeps running whatever
+     * the JS side is doing.
+     */
+    fun setLayoutAfter(context: Context, name: String, config: Config, delayMs: Long) {
+        val app = context.applicationContext
+        main.post {
+            cancelPending(name)
+            val task = Runnable {
+                Log.d(TAG, "deferred relayout firing for $name -> ${config.width}x${config.height}")
+                pendingLayouts.remove(name)
+                applyLayout(app, name, config)
             }
+            pendingLayouts[name] = task
+            Log.d(TAG, "scheduling relayout of $name in ${delayMs}ms -> ${config.width}x${config.height}")
+            main.postDelayed(task, delayMs.coerceAtLeast(0L))
+        }
+    }
+
+    private fun cancelPending(name: String) {
+        pendingLayouts.remove(name)?.let { main.removeCallbacks(it) }
+    }
+
+    /** Main thread only. */
+    private fun applyLayout(app: Context, name: String, config: Config) {
+        val view = views[name]
+        if (view == null) {
+            Log.w(TAG, "applyLayout($name): no such window")
+            return
+        }
+        try {
+            val lp = layoutParams(app, config)
+            params[name] = lp
+            windowManager(app).updateViewLayout(view, lp)
+        } catch (t: Throwable) {
+            Log.e(TAG, "failed to relayout overlay $name", t)
         }
     }
 
@@ -115,6 +166,7 @@ object OverlayManager {
     fun hide(context: Context, name: String) {
         val app = context.applicationContext
         main.post {
+            cancelPending(name)
             val view = views.remove(name) ?: return@post
             params.remove(name)
             try {

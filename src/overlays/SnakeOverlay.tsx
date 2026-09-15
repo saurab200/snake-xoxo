@@ -188,14 +188,6 @@ const BEZEL_SPACING = 3.2;
  */
 const TAIL_REST_Y = 10;
 
-/**
- * Distance from the top of the overlay window to the session row.
- *
- * Must clear the status bar (~24dp), which is drawn above application overlays
- * -- anything higher is visually behind it and untappable.
- */
-const ROW_TOP_INSET = 30;
-
 /** After a committed pull: hold the coil, then crawl home. */
 const COIL_HOLD_MS = 900;
 const CRAWL_HOME_MS = 2400;
@@ -346,8 +338,26 @@ export default function SnakeOverlay() {
 
   const [minutes, setMinutes] = useState(0);
   const [dragging, setDragging] = useState(false);
-  /** True while the snake is animating back home after a release. */
-  const [returning, setReturning] = useState(false);
+
+  /**
+   * When the snake will have finished animating home, as a timestamp.
+   *
+   * The big drag window has to stay up until then or the snake would be clipped
+   * halfway through its own exit. This is a deadline rather than a boolean
+   * because the resize it guards is scheduled natively -- see recoil().
+   */
+  const returnsAt = useRef(0);
+
+  /**
+   * What the window should become when the crawl home finishes.
+   *
+   * Needed because a committed pull knows a session is coming before the state
+   * says so: startSession() is awaited after recoil() starts the animation, so
+   * for a beat `resting` is still false. Without this the resize scheduled
+   * mid-crawl targets the tiny idle window, and if the await ran past the
+   * deadline the session pills would be laid out in a 96x64dp box.
+   */
+  const returnsTo = useRef(SNAKE_LAYOUT);
 
   const pan = useMemo(
     () =>
@@ -426,19 +436,34 @@ export default function SnakeOverlay() {
     lastMinutes.current = 0;
     setMinutes(0);
     setDragging(false);
-    setReturning(true);
 
-    const done = () => {
-      grown.current = false;
-      setReturning(false);
-    };
+    // The gesture is over, so the next touch-down is free to grow the window
+    // again. Reset here rather than when the animation ends: that callback is
+    // not delivered while Tether is backgrounded.
+    grown.current = false;
 
-    // Belt and braces: a stuck animation must never strand the huge drag
-    // window on screen, blocking a 170x440dp slab of whatever is underneath.
     const total = committed
-      ? COIL_HOLD_MS + CRAWL_HOME_MS + 1200
-      : RETRACT_MS + 400;
-    setTimeout(done, total);
+      ? COIL_HOLD_MS + CRAWL_HOME_MS + 300
+      : RETRACT_MS + 200;
+    returnsAt.current = Date.now() + total;
+    returnsTo.current = committed ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT;
+
+    /**
+     * Book the shrink NATIVELY, now.
+     *
+     * Nothing in JS can be relied on to run when this animation ends. The
+     * overlay is on screen exactly when Tether is backgrounded, and in that
+     * state neither a setTimeout nor the completion callback of a native-driver
+     * animation is delivered -- so the window used to stay at its full drag size
+     * forever, clipping the + pill and leaving a 170x440dp slab over the
+     * launcher.
+     *
+     * The effect below refines the target once the session state settles; each
+     * call cancels the previous one, and a new pull cancels it outright.
+     */
+    Overlay.setLayoutAfter('SnakeOverlay', returnsTo.current, total).catch(
+      () => {},
+    );
 
     if (!committed) {
       Animated.timing(dragY, {
@@ -446,7 +471,7 @@ export default function SnakeOverlay() {
         duration: RETRACT_MS,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
-      }).start(done);
+      }).start();
       return;
     }
 
@@ -477,7 +502,7 @@ export default function SnakeOverlay() {
         easing: Easing.inOut(Easing.ease),
         useNativeDriver: true,
       }),
-    ]).start(done);
+    ]).start();
   }
 
   /**
@@ -492,16 +517,29 @@ export default function SnakeOverlay() {
   const resting = session.isActive || session.isLockedOut;
 
   useEffect(() => {
-    // The big window has to stay up for the whole crawl home, or the snake
-    // would be clipped halfway through its own exit.
-    if (dragging || returning) {
+    if (dragging) {
+      return; // mid-pull: the window is already at its full drag size
+    }
+    const wait = returnsAt.current - Date.now();
+
+    if (wait > 0) {
+      // Still crawling home. Hand the resize to the native clock, which keeps
+      // running while Tether is backgrounded, and keep the target the pull
+      // asked for -- session state may not have caught up yet.
+      if (resting) {
+        returnsTo.current = SNAKE_LAYOUT_ACTIVE;
+      }
+      Overlay.setLayoutAfter('SnakeOverlay', returnsTo.current, wait).catch(
+        () => {},
+      );
       return;
     }
+
     Overlay.setLayout(
       'SnakeOverlay',
       resting ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT,
     ).catch(() => {});
-  }, [resting, dragging, returning]);
+  }, [resting, dragging]);
 
   const coiled = (
     <View style={styles.coil} pointerEvents="box-none">
@@ -601,11 +639,11 @@ const styles = StyleSheet.create({
    * Pinned to the TOP, not centred.
    *
    * Centring meant the pills sat at the vertical middle of whatever the window
-   * happened to be. That is fine once it settles at 104dp, but for the ~3.9s
-   * of the crawl-home animation the window is still the 440dp drag size, so
-   * the timer rendered around 220dp down the screen and then jumped back up.
-   * Aligning to the top makes the position independent of window height, so
-   * the timer and + appear under the status bar and stay there.
+   * happened to be, which is only the right answer once it has settled at
+   * 104dp. Aligning to the top makes their position independent of the window
+   * height, so the timer and + appear directly under the status bar during the
+   * crawl home and do not move afterwards. The window itself already starts
+   * below the status bar, so no extra inset is needed.
    */
   activeRow: {
     flex: 1,
@@ -613,7 +651,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'center',
     gap: 8,
-    paddingTop: ROW_TOP_INSET,
   },
   /**
    * Same box and same top alignment as the resting window, so the tail is
@@ -624,8 +661,6 @@ const styles = StyleSheet.create({
     width: 96,
     height: 64,
     overflow: 'hidden',
-    // Lifted so the tail hangs from the same line the pills start on.
-    marginTop: -ROW_TOP_INSET,
   },
   pill: {
     backgroundColor: '#16a34a',

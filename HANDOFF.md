@@ -1,6 +1,6 @@
 # Tether — Handoff
 
-State of the project as of `8b2e689` on **`feature/taskui`**. Written for whoever picks this up next.
+State of the project on **`feature/taskui`**. Written for whoever picks this up next.
 
 Read [README.md](README.md) for setup. This file is what the README cannot tell
 you: what actually works, where the sharp edges are, and which decisions you
@@ -35,7 +35,7 @@ modules, 6 overlays.
 | Task card | Working; only 1 of 3 tabs wired |
 | Integrations catalogue | Working; only Canvas is real |
 | Canvas API | **Never tested against a live instance** |
-| Kill switch (✕) | Working, verified — including that it stays stopped |
+| Kill switch (✕) | Working, verified — stops the session, leaves the snake |
 | Gamification: points, skins, leaderboard | Working, verified after the merge |
 | Haptics | **Unverified** — emulator has no vibrator |
 
@@ -44,7 +44,7 @@ the result, not by assuming a build implies behaviour.
 
 ---
 
-## 3. Five decisions not to undo
+## 3. Six decisions not to undo
 
 These look like things worth tidying. They are not.
 
@@ -82,6 +82,15 @@ accessibility service can read the blocklist at boot, before any JS has run.
 
 **Check every native dependency's Kotlin version before adding it.** Pure-JS
 packages are safe.
+
+### Overlay resizes that happen "later" are timed in Kotlin
+
+`Overlay.setLayoutAfter(name, config, ms)` exists because `setTimeout` does not
+work for this. See §10 for the full story; the short version is that the
+overlays are on screen precisely when Tether is backgrounded, and in that state
+RN delivers neither JS timer callbacks nor the completion callbacks of
+native-driver animations. Anything that must happen when an animation ends has
+to be timed by a native `Handler`.
 
 ### Do not clone into a path with a space
 
@@ -267,19 +276,81 @@ overlays natively, so nothing depends on the component still existing.
 **The general shape:** if an async handler tears down its own UI, everything
 after that line is on borrowed time. Do the durable work first.
 
-### A flag nothing consulted
+### A flag nothing consulted — then the flag itself turned out to be wrong
 
 The ✕ set `armed = false` in Prefs, and `BootReceiver` honoured it — but
 `startSnake()` called `Focus.arm()` unconditionally on every process start. The
 accessibility service revives the process constantly, so "stop everything" undid
-itself within seconds.
-
-`showSnake()` now checks `Focus.isArmed()` and returns early. `rearm()` arms
-explicitly, which is what the Focus tab's "Re-pin snake" calls.
+itself within seconds. The fix was to make `showSnake()` read the flag too.
 
 **The general shape:** a flag is only as good as the number of places that read
 it. This one had one writer and one reader, and the third path ignored it.
 
-Verified after the fix: the ✕ stopped the service, opening another app revived
-the process (the accessibility service does that), and Tether stayed down —
-no service, no overlays. "Re-pin snake" brought it back.
+The sequel is the more useful lesson. Once the flag worked, the behaviour it
+bought was wrong: the ✕ took the snake off the screen, and it only came back via
+a button buried in the Focus tab. The snake is the app's entire surface. Making
+the panic button able to remove it meant one stray double-tap looked exactly
+like an uninstall.
+
+So the flag is gone again — deliberately, not by regression. See §11.
+
+### The animation finished, but nothing was told about it
+
+The snake's drag window is 170x440dp, grown on touch-down so a full pull is not
+clipped. After the release it has to shrink back to 96x64dp (idle) or 320x104dp
+(session). That shrink was driven by the completion callback of the crawl-home
+animation, with a `setTimeout` as a backstop.
+
+Neither ever ran. The window stayed at its full drag size from the first pull
+onward, forever, across sessions and reboots — a 170x440dp invisible slab over
+the launcher, with the `+` pill clipped off its right edge.
+
+**Why:** the overlay is on screen exactly when Tether is *backgrounded*. In that
+state React Native delivers neither JS timer callbacks nor the completion
+callbacks of `useNativeDriver` animations. The animation itself runs — you can
+watch the snake crawl home — but nothing downstream of it fires. A previous fix
+in this same function blamed driver mixing for an identical symptom; that was
+the same cause wearing a different hat.
+
+The fix is `Overlay.setLayoutAfter`, which schedules the resize on the service's
+own `Handler`. JS states the intent immediately and native owns the clock. A
+later `setLayout`, `setLayoutAfter` or `hide` on the same overlay cancels a
+pending one, so a new pull cannot be shrunk out from under itself.
+
+**The general shape:** in this app, "background" is the normal case, not the
+edge case. Before relying on any callback, ask whether it is delivered when no
+activity exists. Native events (the 1s ticker) and native handlers are; JS
+timers and animation callbacks are not.
+
+Worth knowing: the earlier "timer pill sits too low on screen" bug was this bug.
+It was treated as a layout problem and patched with a 30dp inset, which made the
+pills look right inside the stuck 440dp window. Both the inset and the stuck
+window are gone now.
+
+---
+
+## 11. The snake is permanent
+
+The snake is on screen from install onward. It is not a session artefact and
+nothing in the normal running of the app takes it away.
+
+That means three things in the code, and all three have to agree:
+
+- `showSnake()` in `src/state/bootstrap.ts` has **no armed gate**. It pins the
+  snake on every process start and calls `Focus.arm()` (idempotent) to make sure
+  the foreground service the overlay depends on is up.
+- `BootReceiver` starts `TetherService` on `BOOT_COMPLETED` **unconditionally**.
+- `stopEverything()` in `KillSwitchOverlay` stops the session and any lockout and
+  hides only the transient overlays — `BlockOverlay`, `TaskCardOverlay`,
+  `WidgetOverlay`, `ReminderOverlay`. It does **not** hide `SnakeOverlay`, does
+  not hide itself, and does not call `Focus.disarm()`. The button says *Stop
+  session*, which is what it does.
+
+The one thing that still hides the snake is Tether being in the foreground — the
+`AppState` listener in `bootstrap.ts` pulls it, the ✕ and the task card down while
+you are looking at the app itself, and puts them back when you leave. That is
+intentional: the overlay would otherwise sit on top of the app's own UI.
+
+**If you are tempted to let something remove the snake, don't.** There is no
+in-app path back to it any more, because there is no longer meant to be a state
+it can be missing from.

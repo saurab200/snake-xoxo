@@ -65,16 +65,14 @@ export default function KillSwitchOverlay() {
   }
 
   /**
-   * Order matters, and the obvious order was wrong.
+   * Stops what is RUNNING, and leaves the snake where it is.
    *
-   * hideAll() used to run before disarm(). It unmounts every overlay INCLUDING
-   * this one -- the very component running this handler -- so disarm() never
-   * landed and the foreground service survived a "stop everything".
+   * This used to disarm and hide every overlay, so the snake vanished from the
+   * bezel and only came back via "Re-pin snake". The snake is meant to be a
+   * permanent fixture from install onward -- the panic button exists to end a
+   * session or a lockout, not to uninstall the app from the screen.
    *
-   * disarm() goes first now. It stops the service, whose onDestroy takes the
-   * overlays down natively, so nothing depends on this component still being
-   * mounted. hideAll() stays as a fallback for the case where the service was
-   * not running to begin with.
+   * The service stays up, because the snake needs it to stay on screen.
    */
   async function stopEverything() {
     try {
@@ -83,12 +81,22 @@ export default function KillSwitchOverlay() {
     try {
       await RemindersApi.stopLockout();
     } catch {}
-    try {
-      await Focus.disarm();
-    } catch {}
-    try {
-      await Overlay.hideAll();
-    } catch {}
+
+    // Only the transient overlays. NOT SnakeOverlay or this one.
+    for (const name of [
+      'BlockOverlay',
+      'TaskCardOverlay',
+      'WidgetOverlay',
+      'ReminderOverlay',
+    ]) {
+      try {
+        await Overlay.hide(name);
+      } catch {}
+    }
+
+    // Collapse back to the bare cross. Nothing else does this now that the
+    // handler no longer hides its own overlay.
+    disarm();
   }
 
   if (!confirming) {
@@ -107,7 +115,7 @@ export default function KillSwitchOverlay() {
         <Text style={styles.cancelText}>Cancel</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.confirm} onPress={stopEverything}>
-        <Text style={styles.confirmText}>Stop everything</Text>
+        <Text style={styles.confirmText}>Stop session</Text>
       </TouchableOpacity>
     </View>
   );

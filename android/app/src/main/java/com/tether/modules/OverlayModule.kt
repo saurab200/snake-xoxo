@@ -43,6 +43,19 @@ class OverlayModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(true)
     }
 
+    /**
+     * Resize after a delay, timed natively.
+     *
+     * For resizes that have to happen when an animation finishes: JS timers and
+     * animation callbacks are not delivered while Tether is backgrounded, which
+     * is when the overlays are actually on screen. See OverlayManager.
+     */
+    @ReactMethod
+    fun setLayoutAfter(name: String, options: ReadableMap?, delayMs: Double, promise: Promise) {
+        OverlayManager.setLayoutAfter(reactContext, name, configFrom(options), delayMs.toLong())
+        promise.resolve(true)
+    }
+
     /** Push new props into an already-visible overlay without re-creating it. */
     @ReactMethod
     fun update(name: String, props: ReadableMap, promise: Promise) {

@@ -23,25 +23,7 @@ class FocusModule(private val reactContext: ReactApplicationContext) :
     /** Start the foreground service. Call once the user has granted permissions. */
     @ReactMethod
     fun arm(promise: Promise) {
-        Prefs.setArmed(reactContext, true)
         TetherService.start(reactContext)
-        promise.resolve(true)
-    }
-
-    /**
-     * Whether the snake should be on screen at all. Cleared by the kill switch
-     * and honoured across reboots, so JS must ask before re-arming itself.
-     */
-    @ReactMethod
-    fun isArmed(promise: Promise) {
-        promise.resolve(Prefs.isArmed(reactContext))
-    }
-
-    @ReactMethod
-    fun disarm(promise: Promise) {
-        // Stays off through a reboot -- see BootReceiver.
-        Prefs.setArmed(reactContext, false)
-        TetherService.stop(reactContext)
         promise.resolve(true)
     }
 
@@ -49,13 +31,6 @@ class FocusModule(private val reactContext: ReactApplicationContext) :
     fun startSession(minutes: Int, blocklist: ReadableArray, promise: Promise) {
         val blocked = (0 until blocklist.size()).mapNotNull { blocklist.getString(it) }.toSet()
         FocusSessionStore.start(minutes, blocked)
-        /**
-         * Starting a session is an explicit "I want this running" action, so it
-         * re-arms. Without this the kill switch's disarm outlived the user's
-         * intent: a session would run with the snake refusing to appear,
-         * because showSnake() checks isArmed and startSession never set it.
-         */
-        Prefs.setArmed(reactContext, true)
         // Persist immediately so the session survives an OOM kill or force-stop.
         Prefs.saveSession(
             reactContext,

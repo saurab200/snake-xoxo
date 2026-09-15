@@ -134,8 +134,9 @@ export default function HomeScreen() {
           muted
         />
         <Text style={styles.hint}>
-          A ✕ sits in the top-right corner while the snake is up. Tap it twice to
-          stop everything — session, lockout and overlays — from anywhere.
+          A ✕ sits in the top-right corner. Tap it twice to end whatever is
+          running — session, lockout, task card — from anywhere. The snake
+          itself stays put: it lives on your screen from install onward.
         </Text>
       </Section>
 

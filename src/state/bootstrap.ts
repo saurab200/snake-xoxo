@@ -22,18 +22,13 @@ async function showSnake() {
     }
 
     /**
-     * Respect an explicit close.
+     * No armed gate any more.
      *
-     * This used to call arm() unconditionally on every process start. The
-     * accessibility service revives the process, so "stop everything" undid
-     * itself within seconds -- the kill switch cleared the flag and this put it
-     * straight back.
+     * The snake is a permanent fixture from install onward, so there is no
+     * state in which it should be absent while the overlay permission is
+     * granted. arm() is still called because it starts the foreground service
+     * the snake needs to stay on screen; it is idempotent.
      */
-    if (!(await Focus.isArmed())) {
-      return;
-    }
-
-    // The snake needs the process alive to stay on screen. Idempotent.
     await Focus.arm();
 
     const {isActive} = await Focus.getState();
@@ -84,10 +79,11 @@ export function hideSnake(): Promise<boolean> {
 }
 
 /**
- * Bring the snake back after a kill switch.
+ * Repair hatch for the Focus tab's "Re-pin snake".
  *
- * Must arm explicitly: showSnake() now refuses to run while disarmed, which is
- * the whole point of the fix above.
+ * Nothing in normal operation takes the snake away any more, so this exists for
+ * the cases outside our control: the overlay permission was revoked and later
+ * granted again, or Android tore the window down. It is safe to call at will.
  */
 export async function rearm(): Promise<void> {
   try {
