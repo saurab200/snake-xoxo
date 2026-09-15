@@ -18,6 +18,7 @@ import {
   RemindersApi,
 } from '../native';
 import RewardBadge from '../components/RewardBadge';
+import {REWARD_LAYOUT} from '../overlays/RewardOverlay';
 import {PEEK_NOW_EVENT} from '../overlays/SnakeOverlay';
 import {WIDGET_LAYOUT} from '../overlays/WidgetOverlay';
 import {rearm, setSnakePeeking, startSnake} from '../state/bootstrap';
@@ -43,17 +44,28 @@ export default function HomeScreen() {
     setPerms(await Permissions.getStatus());
   }, []);
 
-  // Permissions are granted on a Settings screen, so re-check on resume.
+  /**
+   * Permissions are granted on a Settings screen, so re-check on resume.
+   *
+   * Depends on session.refresh (a stable useCallback) and NOT on `session`.
+   * useFocusSession returns a fresh object literal every render, and the native
+   * tick re-renders once a second -- so depending on the object re-ran this
+   * effect every second, firing a TetherPermissions.getStatus bridge call and
+   * re-registering the AppState listener each time. That accumulated hundreds of
+   * pending native callbacks ("Excessive number of pending callbacks") and
+   * eventually makes React Native start dropping calls.
+   */
+  const refreshSession = session.refresh;
   useEffect(() => {
     refreshPerms();
     const sub = AppState.addEventListener('change', s => {
       if (s === 'active') {
         refreshPerms();
-        session.refresh();
+        refreshSession();
       }
     });
     return () => sub.remove();
-  }, [refreshPerms, session]);
+  }, [refreshPerms, refreshSession]);
 
   const allGranted = perms.overlay && perms.accessibility;
 
@@ -65,7 +77,32 @@ export default function HomeScreen() {
         <View style={styles.pointsRow}>
           <Text style={styles.pointsValue}>{game.totalPoints}</Text>
           <Text style={styles.pointsUnit}>pts</Text>
+          <View style={styles.levelPill}>
+            <Text style={styles.levelPillText}>Lv {game.level}</Text>
+          </View>
         </View>
+
+        {/*
+          Static bar, not animated: the animated version lives in RewardOverlay
+          where the user is actually watching. Here it is a status readout, and
+          a width percentage is the simplest thing that cannot drift out of sync.
+        */}
+        <View style={styles.levelTrack}>
+          <View
+            style={[
+              styles.levelFill,
+              {
+                width: `${Math.round(game.progress * 100)}%`,
+                backgroundColor: game.activeSkinColor,
+              },
+            ]}
+          />
+        </View>
+        <Text style={styles.levelCaption}>
+          {game.xpIntoLevel}/{game.xpForLevel} XP · {game.xpToNext} to level{' '}
+          {game.level + 1}
+        </Text>
+
         <Text style={styles.hint}>
           Finish a focus session to earn 1 point per minute, then unlock and
           equip new snake skins.
@@ -239,6 +276,20 @@ export default function HomeScreen() {
           muted
         />
         <Button
+          label="Preview reward popup (+25 XP)"
+          onPress={() =>
+            Overlay.show('RewardOverlay', REWARD_LAYOUT, {
+              nonce: Date.now(),
+              pointsAwarded: 25,
+            })
+          }
+          muted
+        />
+        <Text style={styles.hint}>
+          Shows the celebration without awarding anything. Press Home first to
+          see it float over another app — that is where it really appears.
+        </Text>
+        <Button
           label="Re-emit that session (should add 0)"
           onPress={() => {
             if (lastSimulated.current) {
@@ -334,6 +385,27 @@ const styles = StyleSheet.create({
   pointsRow: {flexDirection: 'row', alignItems: 'baseline', gap: 6},
   pointsValue: {color: '#fff', fontSize: 34, fontWeight: '800'},
   pointsUnit: {color: '#8b949e', fontSize: 14, fontWeight: '700'},
+  levelPill: {
+    marginLeft: 'auto',
+    backgroundColor: '#0d1117',
+    borderWidth: 1,
+    borderColor: '#30363d',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  levelPillText: {color: '#e6edf3', fontSize: 12, fontWeight: '800'},
+  levelTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#0d1117',
+    borderWidth: 1,
+    borderColor: '#30363d',
+    overflow: 'hidden',
+    marginTop: 12,
+  },
+  levelFill: {height: '100%', borderRadius: 3},
+  levelCaption: {color: '#8b949e', fontSize: 11, marginTop: 6},
   skinRow: {flexDirection: 'row', gap: 8, marginTop: 12},
   status: {color: '#e6edf3', fontSize: 16, marginBottom: 10},
   hint: {color: '#8b949e', fontSize: 12, marginTop: 8},
