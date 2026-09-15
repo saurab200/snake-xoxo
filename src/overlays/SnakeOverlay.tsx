@@ -188,6 +188,14 @@ const BEZEL_SPACING = 3.2;
  */
 const TAIL_REST_Y = 10;
 
+/**
+ * Distance from the top of the overlay window to the session row.
+ *
+ * Must clear the status bar (~24dp), which is drawn above application overlays
+ * -- anything higher is visually behind it and untappable.
+ */
+const ROW_TOP_INSET = 30;
+
 /** After a committed pull: hold the coil, then crawl home. */
 const COIL_HOLD_MS = 900;
 const CRAWL_HOME_MS = 2400;
@@ -589,13 +597,23 @@ const styles = StyleSheet.create({
 
   /** Gesture host in the coil state; sized to the coil so it catches the body. */
   coilGrab: {width: COIL_BOX, height: 150, alignItems: 'center'},
+  /**
+   * Pinned to the TOP, not centred.
+   *
+   * Centring meant the pills sat at the vertical middle of whatever the window
+   * happened to be. That is fine once it settles at 104dp, but for the ~3.9s
+   * of the crawl-home animation the window is still the 440dp drag size, so
+   * the timer rendered around 220dp down the screen and then jumped back up.
+   * Aligning to the top makes the position independent of window height, so
+   * the timer and + appear under the status bar and stay there.
+   */
   activeRow: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'center',
     gap: 8,
-    paddingTop: 4,
+    paddingTop: ROW_TOP_INSET,
   },
   /**
    * Same box and same top alignment as the resting window, so the tail is
@@ -605,8 +623,9 @@ const styles = StyleSheet.create({
   activeCoil: {
     width: 96,
     height: 64,
-    alignSelf: 'flex-start',
     overflow: 'hidden',
+    // Lifted so the tail hangs from the same line the pills start on.
+    marginTop: -ROW_TOP_INSET,
   },
   pill: {
     backgroundColor: '#16a34a',
