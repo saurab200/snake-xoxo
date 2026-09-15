@@ -32,17 +32,27 @@ async function showSnake() {
      */
     await Focus.arm();
 
+    /**
+     * ORDER MATTERS. Among overlay windows, z-order is the order they were
+     * added, so the bar goes up FIRST and the snake on top of it -- that is
+     * what lets the head rise out of the bar during a session instead of
+     * disappearing behind it.
+     *
+     * The XP bar is the other permanent fixture: it is where every point the
+     * user earns visibly lands, so it outlives any one session too.
+     */
+    await Overlay.show('XpBarOverlay', XP_BAR_LAYOUT);
+
     const {isActive} = await Focus.getState();
     await Overlay.show(
       'SnakeOverlay',
       isActive ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT,
     );
+
     // The panic button travels with the snake -- it has to be reachable in
-    // exactly the situations where the snake is visible.
+    // exactly the situations where the snake is visible. It re-raises itself
+    // above anything added later, so it stays clear of both.
     await Overlay.show('KillSwitchOverlay', KILL_LAYOUT);
-    // The XP bar is the other permanent fixture: it is where every point the
-    // user earns visibly lands, so it outlives any one session too.
-    await Overlay.show('XpBarOverlay', XP_BAR_LAYOUT);
   } catch {
     /* native not ready yet; the AppState hook below retries */
   }

@@ -1,7 +1,6 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Animated,
-  Easing,
   PanResponder,
   StyleSheet,
   Text,
@@ -199,11 +198,6 @@ const BEZEL_SPACING = 3.2;
  */
 const TAIL_REST_Y = 10;
 
-/** After a committed pull: hold the coil, then crawl home. */
-const COIL_HOLD_MS = 900;
-const CRAWL_HOME_MS = 2400;
-const RETRACT_MS = 450;
-
 /** Grown while dragging so a full pull is not clipped by the window. */
 export const SNAKE_LAYOUT_DRAGGING = {
   width: 170,
@@ -214,11 +208,18 @@ export const SNAKE_LAYOUT_DRAGGING = {
   focusable: false,
 };
 
-/** Active: coiled snake plus the timer and add-reminder pills beside it. */
+/**
+ * Active: the head poking out of the XP bar, with the pills beside it.
+ *
+ * Starts at y=0 rather than below the bar, and is XP_BAR_HEIGHT taller to pay
+ * for it, so the head can overlap the bar and look like it is coming up
+ * through it. The pills are pushed back down by the same amount from inside
+ * (see styles.activeRow), so only the head trespasses.
+ */
 export const SNAKE_LAYOUT_ACTIVE = {
   width: 320,
-  height: 104,
-  y: TOP_OFFSET,
+  height: 104 + TOP_OFFSET,
+  y: 0,
   gravity: 'top' as const,
   touchThrough: true,
   focusable: false,
@@ -307,6 +308,77 @@ const SnakeBody = React.memo(function SnakeBody({
   );
 });
 
+/**
+ * THE SNAKE WHEN NOBODY IS TOUCHING IT.
+ *
+ * Plain Views, no Animated, no interpolation of dragY -- and that is the whole
+ * point. The animated body is correct only while a finger is driving it; the
+ * moment the gesture ends, nothing advances it (see HANDOFF.md section 10), so
+ * for months the snake simply froze in whatever pose the release caught it in.
+ * What looked like "the head pops out" was a fully extended snake stranded
+ * mid-pull, clipped by a small window.
+ *
+ * So the settled states are drawn, not animated, and land in exactly one place:
+ *
+ *   tail -- idle: a taper hanging down from under the XP bar.
+ *   head -- in session: the head up in the bar itself, eyes clear of it.
+ */
+const SETTLED_TAIL = [7, 6, 5.5, 5, 4.5, 4];
+
+function SnakeAtRest({
+  variant,
+  skinColor,
+}: {
+  variant: 'head' | 'tail';
+  skinColor: string;
+}) {
+  const palette = buildPalette(skinColor);
+
+  if (variant === 'tail') {
+    return (
+      <View style={styles.restTail} pointerEvents="none">
+        {SETTLED_TAIL.map((size, i) => (
+          <View
+            key={i}
+            style={{
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              marginTop: i === 0 ? 0 : -0.5,
+              backgroundColor: palette.body(i / SETTLED_TAIL.length),
+              borderWidth: 1,
+              borderColor: palette.border,
+            }}
+          />
+        ))}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.restHead} pointerEvents="none">
+      <View
+        style={[
+          styles.restHeadBall,
+          {backgroundColor: palette.head, borderColor: palette.border},
+        ]}>
+        <View style={styles.face}>
+          <View style={styles.eye} />
+          <View style={styles.eye} />
+        </View>
+      </View>
+
+      {/* The neck, disappearing back down into the bar. */}
+      <View
+        style={[
+          styles.restNeck,
+          {backgroundColor: palette.body(0.2), borderColor: palette.border},
+        ]}
+      />
+    </View>
+  );
+}
+
 /** Isolated so a detent re-renders one text node, not the whole body. */
 const DurationReadout = React.memo(function DurationReadout({
   minutes,
@@ -352,25 +424,6 @@ export default function SnakeOverlay() {
   const [minutes, setMinutes] = useState(0);
   const [dragging, setDragging] = useState(false);
 
-  /**
-   * When the snake will have finished animating home, as a timestamp.
-   *
-   * The big drag window has to stay up until then or the snake would be clipped
-   * halfway through its own exit. This is a deadline rather than a boolean
-   * because the resize it guards is scheduled natively -- see recoil().
-   */
-  const returnsAt = useRef(0);
-
-  /**
-   * What the window should become when the crawl home finishes.
-   *
-   * Needed because a committed pull knows a session is coming before the state
-   * says so: startSession() is awaited after recoil() starts the animation, so
-   * for a beat `resting` is still false. Without this the resize scheduled
-   * mid-crawl targets the tiny idle window, and if the await ran past the
-   * deadline the session pills would be laid out in a 96x64dp box.
-   */
-  const returnsTo = useRef(SNAKE_LAYOUT);
 
   const pan = useMemo(
     () =>
@@ -444,78 +497,43 @@ export default function SnakeOverlay() {
    * too short to start anything just retracts -- it never fully emerges, so
    * there is nothing to show off.
    */
+  /**
+   * Let go of the tail.
+   *
+   * There is no return animation, and that is deliberate. This function used to
+   * spring the snake into a coil, hold it, and crawl it home over 2.4s. None of
+   * that was ever seen: the overlay is on screen only while Tether is
+   * BACKGROUNDED, and React Native advances no native-driver animation in that
+   * state. What actually happened is that the snake froze in whatever pose the
+   * release caught it in -- usually fully extended -- and stayed there until the
+   * next process start. The pose the user saw was decided by where their finger
+   * happened to stop.
+   *
+   * So the snake settles instead: dragY goes back to its rest value for the next
+   * pull, and the settled look is DRAWN by SnakeAtRest rather than animated to.
+   * Deterministic, and identical every time.
+   */
   function recoil(committed: boolean) {
     dragRef.current = 0;
     lastMinutes.current = 0;
     setMinutes(0);
     setDragging(false);
 
-    // The gesture is over, so the next touch-down is free to grow the window
-    // again. Reset here rather than when the animation ends: that callback is
-    // not delivered while Tether is backgrounded.
+    // The gesture is over, so the next touch-down is free to grow the window.
     grown.current = false;
-
-    const total = committed
-      ? COIL_HOLD_MS + CRAWL_HOME_MS + 300
-      : RETRACT_MS + 200;
-    returnsAt.current = Date.now() + total;
-    returnsTo.current = committed ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT;
+    dragY.setValue(0);
 
     /**
-     * Book the shrink NATIVELY, now.
+     * Resize NOW, to what this pull asked for.
      *
-     * Nothing in JS can be relied on to run when this animation ends. The
-     * overlay is on screen exactly when Tether is backgrounded, and in that
-     * state neither a setTimeout nor the completion callback of a native-driver
-     * animation is delivered -- so the window used to stay at its full drag size
-     * forever, clipping the + pill and leaving a 170x440dp slab over the
-     * launcher.
-     *
-     * The effect below refines the target once the session state settles; each
-     * call cancels the previous one, and a new pull cancels it outright.
+     * Committed means a session is starting, so the window goes straight to its
+     * active size -- session state is a promise resolution behind, and waiting
+     * for it would flash the idle window first.
      */
-    Overlay.setLayoutAfter('SnakeOverlay', returnsTo.current, total).catch(
-      () => {},
-    );
-
-    if (!committed) {
-      Animated.timing(dragY, {
-        toValue: 0,
-        duration: RETRACT_MS,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }).start();
-      return;
-    }
-
-    Animated.sequence([
-      Animated.spring(dragY, {
-        toValue: COIL_AT,
-        useNativeDriver: true,
-        tension: 60,
-        friction: 10,
-      }),
-      /**
-       * A hold, expressed as a no-op timing rather than Animated.delay.
-       *
-       * Animated.delay defaults to the JS driver, and mixing drivers inside one
-       * sequence broke the chain: the snake animated home correctly but the
-       * completion callback never fired, so the window stayed at its full
-       * drag size and the session pills rendered halfway down the screen.
-       */
-      Animated.timing(dragY, {
-        toValue: COIL_AT,
-        duration: COIL_HOLD_MS,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-      Animated.timing(dragY, {
-        toValue: 0,
-        duration: CRAWL_HOME_MS,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      }),
-    ]).start();
+    Overlay.setLayout(
+      'SnakeOverlay',
+      committed ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT,
+    ).catch(() => {});
   }
 
   /**
@@ -533,39 +551,37 @@ export default function SnakeOverlay() {
     if (dragging) {
       return; // mid-pull: the window is already at its full drag size
     }
-    const wait = returnsAt.current - Date.now();
-
-    if (wait > 0) {
-      // Still crawling home. Hand the resize to the native clock, which keeps
-      // running while Tether is backgrounded, and keep the target the pull
-      // asked for -- session state may not have caught up yet.
-      if (resting) {
-        returnsTo.current = SNAKE_LAYOUT_ACTIVE;
-      }
-      Overlay.setLayoutAfter('SnakeOverlay', returnsTo.current, wait).catch(
-        () => {},
-      );
-      return;
-    }
-
     Overlay.setLayout(
       'SnakeOverlay',
       resting ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT,
     ).catch(() => {});
   }, [resting, dragging]);
 
-  const coiled = (
-    <View style={styles.coil} pointerEvents="box-none">
-      <SnakeBody dragY={dragY} skinColor={activeSkinColor} />
-      {dragging ? <DurationReadout minutes={minutes} /> : null}
-    </View>
-  );
+  /**
+   * Mid-gesture: the real, animated snake, in the tall drag window.
+   *
+   * Rendered ONLY while a finger is down. dragY is driven by touch events, so
+   * this is the one situation where animation is guaranteed to advance.
+   */
+  if (dragging) {
+    return (
+      <View style={styles.root} pointerEvents="box-none">
+        <View {...pan.panHandlers} style={styles.coilGrab}>
+          <View style={styles.coil} pointerEvents="box-none">
+            <SnakeBody dragY={dragY} skinColor={activeSkinColor} />
+            <DurationReadout minutes={minutes} />
+          </View>
+        </View>
+      </View>
+    );
+  }
 
+  // Settled, no session: the tail hangs from the bar, waiting to be pulled.
   if (!resting) {
     return (
       <View style={styles.root} pointerEvents="box-none">
         <View {...pan.panHandlers} style={styles.coilGrab}>
-          {coiled}
+          <SnakeAtRest variant="tail" skinColor={activeSkinColor} />
         </View>
       </View>
     );
@@ -580,7 +596,7 @@ export default function SnakeOverlay() {
   return (
     <View style={styles.activeRow} pointerEvents="box-none">
       <View {...pan.panHandlers} style={styles.activeCoil}>
-        {coiled}
+        <SnakeAtRest variant="head" skinColor={activeSkinColor} />
       </View>
 
       <TouchableOpacity
@@ -664,16 +680,56 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'center',
     gap: 8,
+    // The window starts at the top of the screen so the head can reach the XP
+    // bar; everything else is pushed back below it.
+    paddingTop: TOP_OFFSET,
   },
   /**
    * Same box and same top alignment as the resting window, so the tail is
    * clipped identically. Centring it here (or scaling it) made the snake look
    * noticeably longer during a session than at rest.
    */
-  activeCoil: {
-    width: 96,
-    height: 64,
-    overflow: 'hidden',
+  /**
+   * Holds the head, and lets it out.
+   *
+   * No overflow:hidden -- the whole point is that the head rises OUT of this
+   * box and into the XP bar above it.
+   */
+  activeCoil: {width: 44, height: 64, alignItems: 'center'},
+
+  /**
+   * Idle: the tail tip, hanging from the underside of the XP bar.
+   *
+   * No top padding: the window already starts at the bar's lower edge, so the
+   * tail should touch it. Any gap and the snake reads as floating loose near
+   * the top of the screen rather than living in the bezel.
+   */
+  restTail: {alignItems: 'center'},
+
+  /**
+   * In session: the head up in the XP bar.
+   *
+   * marginTop lifts it by the bar's full height plus a touch more, so the ball
+   * sits ON the bar with its eyes clear of the track. The snake window is drawn
+   * above the bar's window (bootstrap shows the bar first), so the head reads as
+   * coming up through it rather than hiding behind it.
+   */
+  restHead: {alignItems: 'center', marginTop: -TOP_OFFSET - 2},
+  restHeadBall: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /** A stub of neck, so the head is attached to something. */
+  restNeck: {
+    width: 9,
+    height: 12,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    marginTop: -4,
   },
   pill: {
     backgroundColor: '#16a34a',

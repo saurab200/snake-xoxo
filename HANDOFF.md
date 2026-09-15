@@ -27,7 +27,7 @@ modules, 6 overlays.
 
 | Area | State |
 |---|---|
-| Snake: bezel rest, pull, coil, crawl home | Working, verified on emulator |
+| Snake: bezel rest, pull, settled poses | Working, verified on emulator |
 | Session timer + foreground service | Working, survives reboot and force-stop |
 | Blocking via accessibility service | Working |
 | Vanish mode (apps disappear) | Working, needs Device Owner |
@@ -223,7 +223,7 @@ look broken regardless of the code. `scripts/emulator.sh` already does this.
    Canvas — only the error paths and the shape of the response have been
    reasoned about. This is the highest-value unknown in the codebase.
 2. **Tune the snake's feel on hardware.** `MINUTES_PER_DP`, the spring
-   `tension`/`friction`, `COIL_HOLD_MS`, `CRAWL_HOME_MS` — all picked blind.
+   `tension`/`friction`, `COMMIT_THRESHOLD_DP` — all picked blind.
    Haptics have never actually been felt.
 3. **Warn before enabling vanish mode**, given the shortcut loss above.
 
@@ -259,8 +259,8 @@ Then:
 1. **Home screen** — the snake's tail hangs from the bezel. Small, ignorable.
 2. **Pull the tail down** — it uncoils, the duration climbs with the pull.
    Release around 45 min.
-3. It coils, holds, and **crawls back into the bezel**. A timer pill and a `+`
-   appear beside it.
+3. Let go: **the head pops up into the XP bar**, with a timer pill and a `+`
+   beside it.
 4. **The task panel appears on the right** — what you owe, grouped by due date.
 5. **Tick something off** — the row goes and the bar at the top of the screen
    fills. Tap **›** to minimise the panel to an edge handle.
@@ -352,6 +352,23 @@ pending one, so a new pull cannot be shrunk out from under itself.
 edge case. Before relying on any callback, ask whether it is delivered when no
 activity exists. Native events (the 1s ticker) and native handlers are; JS
 timers and animation callbacks are not.
+
+And a fourth time, the worst of them, in the snake itself. A release used to
+spring the snake into a coil, hold it, then crawl it home over 2.4s. **None of
+that was ever seen by anyone.** The animation did not advance, so the snake
+simply froze in whatever pose the release caught it in -- usually fully
+extended, its head stranded 44dp down the screen, where it stayed until the next
+process start. The pose depended on where the user's finger happened to stop.
+
+That is why `SnakeAtRest` draws the settled states as plain Views instead:
+
+> The animated body is rendered ONLY while a finger is down. dragY is driven by
+> touch events, so that is the one moment animation is guaranteed to advance.
+> Everything after the release is drawn, not animated to.
+
+The coil-and-crawl-home flourish is gone rather than fixed. It could only ever
+play while Tether was in the foreground, and the overlays are hidden then, so
+there was no state in which it could be seen.
 
 The same bug was found a third time in `widgetTrigger.ts`: the task panel was
 shown by `setTimeout(..., 3800)` so it would not collide with the snake crawling

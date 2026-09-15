@@ -28,8 +28,10 @@ React Native 0.75.4 + a Kotlin layer. Android only.
 - Lives in the bezel; only the tail tip shows at rest.
 - One `Animated.Value` drives three stops: **bezel → coiled → extended**, so how
   far it emerges is exactly how far you pull.
-- A committed pull settles into a coil, holds, then crawls home over ~2.4s. A
-  short pull just retracts.
+- Let go and the snake settles into a drawn pose: the tail hanging from the XP
+  bar when idle, or **its head up in the bar** once a session is running. The
+  poses are drawn rather than animated to, so they are identical every time --
+  see HANDOFF.md §10 for why that matters more than it sounds.
 - Duration snaps to 5-minute steps with haptic detents. 60fps, flat 16ms frames.
 - Timer runs in a Kotlin foreground service, so it survives the JS thread idling.
 - Survives reboot and force-stop; the session deadline is preserved exactly.
@@ -105,7 +107,7 @@ reading the result.
 
 | Area | State |
 |---|---|
-| Snake: bezel, pull, coil, crawl home | Verified |
+| Snake: bezel, pull, settled poses | Verified over 3 pulls |
 | Timer, reboot and force-stop survival | Verified |
 | Blocking + vanish mode | Verified |
 | Reminders → lockout | Verified |
@@ -189,8 +191,8 @@ of disappearing.
 1. **Test Canvas against a real instance.** The client has never run against
    live Canvas — only its error paths were reasoned about. Highest-value unknown
    in the codebase. Token: Canvas → Account → Settings → *+ New Access Token*.
-2. **Tune the snake on hardware.** `MINUTES_PER_DP`, spring `tension`/`friction`,
-   `COIL_HOLD_MS`, `CRAWL_HOME_MS` were all picked blind. Haptics unfelt.
+2. **Tune the snake on hardware.** `MINUTES_PER_DP`, `COMMIT_THRESHOLD_DP` and
+   the spring feel were all picked blind. Haptics unfelt.
 3. **Decide whether `feature/taskui` merges into `main` or `develop`.**
 4. **Ask Ali** whether the bezel tail should use his `palette.accent` — his
    peek-nub tinting was dropped with the nub it belonged to.
@@ -236,8 +238,8 @@ Next up:
 1. **Home screen** — the XP bar runs along the bezel and the snake's tail hangs
    from it, small and ignorable.
 2. **Pull the tail down** — it uncoils, duration climbs. Release around 45 min.
-3. It coils, holds, then **crawls back into the bezel**. Timer and `+` pills
-   appear beside it.
+3. Let go: **the snake's head pops up into the XP bar**, with the timer and `+`
+   pills beside it.
 4. **The task panel slides in from the right** — what you owe, grouped by due
    date, floating over the wallpaper with no panel behind it.
 5. **Tick a task** — the row disappears and the bar at the top visibly fills.
