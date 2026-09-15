@@ -36,6 +36,29 @@ class OverlayModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(true)
     }
 
+    /**
+     * Show after a delay, timed natively.
+     *
+     * JS timers do not fire while Tether is backgrounded -- see OverlayManager.
+     */
+    @ReactMethod
+    fun showAfter(
+        name: String,
+        options: ReadableMap?,
+        props: ReadableMap?,
+        delayMs: Double,
+        promise: Promise,
+    ) {
+        OverlayManager.showAfter(
+            reactContext,
+            name,
+            configFrom(options),
+            props?.let { Arguments.toBundle(it) },
+            delayMs.toLong(),
+        )
+        promise.resolve(true)
+    }
+
     /** Resize or move a visible overlay. Remounts nothing -- React state is preserved. */
     @ReactMethod
     fun setLayout(name: String, options: ReadableMap?, promise: Promise) {

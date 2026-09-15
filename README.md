@@ -232,6 +232,17 @@ src/integrations/cache.ts                               widget data cache
 Adding a second integration = write one object implementing `ProductivityIntegration`,
 add it to the array in `registry.ts`. Nothing else changes.
 
+### Person 4 (Person D) — Gamification
+```
+src/state/gamificationStore.ts                          points, levels, skins, dedup
+src/overlays/XpBarOverlay.tsx                           the bar across the bezel
+src/overlays/TaskCardOverlay.tsx                        task panel; ticking pays XP
+src/screens/LeaderboardScreen.tsx                       the Rank tab
+```
+**Consumes:** session-completion events, and `completeTask()` from the task panel.
+**Produces:** `totalPoints` — the single number skins, levels and the leaderboard
+all read.
+
 ---
 
 ## Do not block on each other

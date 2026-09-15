@@ -24,9 +24,15 @@ export const StreakIntegration: ProductivityIntegration = {
     return {
       type: 'todoList',
       items: [
-        {id: 'streak', title: 'Focus streak', context: '3 days'},
-        {id: 'today', title: 'Focused today', context: '1h 15m'},
-        {id: 'blocked', title: 'Distractions blocked', context: '7 attempts'},
+        // readOnly: these are statistics, not work. See TodoItem.readOnly.
+        {id: 'streak', title: 'Focus streak', context: '3 days', readOnly: true},
+        {id: 'today', title: 'Focused today', context: '1h 15m', readOnly: true},
+        {
+          id: 'blocked',
+          title: 'Distractions blocked',
+          context: '7 attempts',
+          readOnly: true,
+        },
       ],
     };
   },

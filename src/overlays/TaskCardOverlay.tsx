@@ -15,27 +15,48 @@ import {
   loadAllTasks,
 } from '../integrations/tasks';
 import {TodoItem} from '../integrations/types';
+import {
+  XP_PER_TASK,
+  completeTask,
+  uncompleteTask,
+  useGamification,
+} from '../state/gamificationStore';
 
+/**
+ * A panel on the RIGHT EDGE, not a bottom sheet.
+ *
+ * It used to be a full-width sheet 640dp tall, which buried the screen it was
+ * meant to sit beside. Anchored to the right it stays out of the way of both
+ * the snake (top) and the launcher's dock (bottom), and it is short enough to
+ * leave most of the screen -- and most touches -- alone.
+ */
 export const TASK_CARD_LAYOUT = {
-  width: -1, // MATCH_PARENT
-  height: 640,
-  gravity: 'bottom' as const,
+  width: 286,
+  height: 430,
+  x: 8,
+  gravity: 'right' as const,
   touchThrough: true,
   focusable: false,
 };
 
-type Tab = 'announcements' | 'todo' | 'done';
-
 /**
- * The task panel that appears once a focus session starts.
+ * Minimised: a handle on the right edge.
  *
- * Answers the question the session raises -- "you are focusing now, on what?"
- *
- * NOTE ON THE TABS: only the middle one is wired. The other two are in the
- * design and are rendered, but tapping them does nothing yet. Canvas exposes
- * announcements and graded work, so both are a connector method away; they are
- * deliberately inert rather than faked with placeholder data.
+ * Deliberately not "hidden". Closing the panel loses the one affordance that
+ * brings it back, so the minimise button shrinks the same window to a tab that
+ * still shows how much is outstanding.
  */
+export const TASK_CARD_LAYOUT_MIN = {
+  width: 54,
+  height: 54,
+  x: 8,
+  gravity: 'right' as const,
+  touchThrough: true,
+  focusable: false,
+};
+
+type Tab = 'todo' | 'done';
+
 type Props = {
   /**
    * Bumped by whoever opens the card. Overlay.show() on an ALREADY VISIBLE
@@ -48,9 +69,13 @@ type Props = {
 export default function TaskCardOverlay({nonce}: Props) {
   const [sections, setSections] = useState<TaskSection[] | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [done, setDone] = useState<Record<string, boolean>>({});
   const [tab, setTab] = useState<Tab>('todo');
   const [loading, setLoading] = useState(false);
+  const [minimized, setMinimized] = useState(false);
+
+  // Completed ids live in the shared store, so a tick survives a reload of the
+  // task list -- and a refresh from Canvas cannot resurrect what was cleared.
+  const {completedTaskIds} = useGamification();
 
   const load = useCallback(async (force: boolean) => {
     setLoading(true);
@@ -63,9 +88,27 @@ export default function TaskCardOverlay({nonce}: Props) {
 
   useEffect(() => {
     load(false);
+
+    /**
+     * Reopening always arrives expanded.
+     *
+     * Overlay.show() on a VISIBLE overlay only pushes props -- it does not
+     * resize the window -- so asking for the panel while it was minimised would
+     * otherwise just reload a 54dp handle and look like nothing happened.
+     */
+    setMinimized(false);
+    Overlay.setLayout('TaskCardOverlay', TASK_CARD_LAYOUT).catch(() => {});
   }, [load, nonce]);
 
-  const close = () => Overlay.hide('TaskCardOverlay');
+  function minimize() {
+    setMinimized(true);
+    Overlay.setLayout('TaskCardOverlay', TASK_CARD_LAYOUT_MIN).catch(() => {});
+  }
+
+  function expand() {
+    setMinimized(false);
+    Overlay.setLayout('TaskCardOverlay', TASK_CARD_LAYOUT).catch(() => {});
+  }
 
   const openAddTask = () =>
     Overlay.show(
@@ -80,27 +123,87 @@ export default function TaskCardOverlay({nonce}: Props) {
       {},
     );
 
-  const total = sections?.reduce((n, s) => n + s.items.length, 0) ?? 0;
+  const isDone = (id: string) => completedTaskIds.includes(id);
+
+  /**
+   * Ticking a task removes it from the list and pays out XP.
+   *
+   * The reward is the row disappearing and the bar at the top of the screen
+   * moving; there is no transient "+10 XP" toast, because a toast needs a timer
+   * to dismiss it and JS timers do not run while Tether is backgrounded -- it
+   * would hang there permanently. See HANDOFF.md section 10.
+   */
+  const toggle = (item: TodoItem) => {
+    if (item.readOnly) {
+      return;
+    }
+    if (isDone(item.id)) {
+      uncompleteTask(item.id);
+    } else {
+      completeTask(item.id);
+    }
+  };
+
+  // Outstanding vs cleared, from the same fetched list.
+  const visible: TaskSection[] = (sections ?? [])
+    .map(s => ({
+      ...s,
+      items: s.items.filter(i =>
+        tab === 'done' ? isDone(i.id) : i.readOnly || !isDone(i.id),
+      ),
+    }))
+    .filter(s => s.items.length > 0);
+
+  const total = visible.reduce((n, s) => n + s.items.length, 0);
+
+  /** Read-only rows are figures, not work, so they are not "outstanding". */
+  const outstanding =
+    sections?.reduce(
+      (n, s) => n + s.items.filter(i => !i.readOnly && !isDone(i.id)).length,
+      0,
+    ) ?? 0;
+
+  /* --- minimised: just a handle ------------------------------------- */
+
+  if (minimized) {
+    return (
+      <View style={styles.root} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.handle}
+          activeOpacity={0.85}
+          onPress={expand}>
+          <Text style={styles.handleGlyph}>‹</Text>
+          {outstanding > 0 ? (
+            <Text style={styles.handleCount}>{outstanding}</Text>
+          ) : null}
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  /* --- expanded ------------------------------------------------------ */
 
   return (
-    <View style={styles.sheet}>
-      <View style={styles.grabber} />
+    <View style={styles.root} pointerEvents="box-none">
+      <View style={styles.header}>
+        <View style={styles.tabBar}>
+          <TabButton
+            label="To do"
+            count={outstanding}
+            active={tab === 'todo'}
+            onPress={() => setTab('todo')}
+          />
+          <TabButton
+            label="Done"
+            count={completedTaskIds.length}
+            active={tab === 'done'}
+            onPress={() => setTab('done')}
+          />
+        </View>
 
-      {/* --- tab bar ------------------------------------------------- */}
-      <View style={styles.tabBar}>
-        <TabButton
-          glyph="⚑"
-          badge={0}
-          active={tab === 'announcements'}
-          onPress={() => {}}
-        />
-        <TabButton
-          glyph="✎"
-          badge={0}
-          active={tab === 'todo'}
-          onPress={() => setTab('todo')}
-        />
-        <TabButton glyph="✓" badge={0} active={tab === 'done'} onPress={() => {}} />
+        <TouchableOpacity style={styles.minimize} onPress={minimize} hitSlop={HIT}>
+          <Text style={styles.minimizeGlyph}>›</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -109,17 +212,21 @@ export default function TaskCardOverlay({nonce}: Props) {
         showsVerticalScrollIndicator={false}>
         {sections === null || (loading && total === 0) ? (
           <View style={styles.centered}>
-            <ActivityIndicator color="#8f8f8f" />
+            <ActivityIndicator color="#94a3b8" />
           </View>
         ) : total === 0 ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyTitle}>Nothing due</Text>
+            <Text style={styles.emptyTitle}>
+              {tab === 'done' ? 'Nothing ticked yet' : 'All clear'}
+            </Text>
             <Text style={styles.emptyBody}>
-              Connect an app on the Apps tab, or add a task below.
+              {tab === 'done'
+                ? `Each task you tick is worth ${XP_PER_TASK} XP.`
+                : 'Connect an app on the Apps tab, or add a task.'}
             </Text>
           </View>
         ) : (
-          sections.map(section => (
+          visible.map(section => (
             <View key={section.label}>
               <TouchableOpacity
                 style={styles.sectionHeader}
@@ -142,10 +249,8 @@ export default function TaskCardOverlay({nonce}: Props) {
                     <TaskRow
                       key={item.id}
                       item={item}
-                      done={Boolean(done[item.id])}
-                      onToggle={() =>
-                        setDone(prev => ({...prev, [item.id]: !prev[item.id]}))
-                      }
+                      done={isDone(item.id)}
+                      onToggle={() => toggle(item)}
                     />
                   ))}
             </View>
@@ -153,15 +258,12 @@ export default function TaskCardOverlay({nonce}: Props) {
         )}
 
         <TouchableOpacity style={styles.addTask} onPress={openAddTask}>
-          <Text style={styles.addTaskText}>+ Add Task</Text>
+          <Text style={styles.addTaskText}>+ Add task</Text>
         </TouchableOpacity>
 
         <View style={styles.footerRow}>
           <TouchableOpacity onPress={() => load(true)} hitSlop={HIT}>
             <Text style={styles.footerAction}>Refresh</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={close} hitSlop={HIT}>
-            <Text style={styles.footerAction}>Hide</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -170,29 +272,25 @@ export default function TaskCardOverlay({nonce}: Props) {
 }
 
 function TabButton({
-  glyph,
-  badge,
+  label,
+  count,
   active,
   onPress,
 }: {
-  glyph: string;
-  badge: number;
+  label: string;
+  count: number;
   active: boolean;
   onPress: () => void;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.tab, active ? styles.tabActive : styles.tabInactive]}
+      style={[styles.tab, active && styles.tabActive]}
       activeOpacity={0.8}
       onPress={onPress}>
-      <Text style={[styles.tabGlyph, active && styles.tabGlyphActive]}>
-        {glyph}
+      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+        {label}
+        {count > 0 ? ` ${count}` : ''}
       </Text>
-      {badge > 0 ? (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{badge}</Text>
-        </View>
-      ) : null}
     </TouchableOpacity>
   );
 }
@@ -218,30 +316,22 @@ function TaskRow({
 
         <Text
           style={[styles.taskTitle, done && styles.taskTitleDone]}
-          numberOfLines={1}>
+          numberOfLines={2}>
           {item.title}
         </Text>
 
-        <View style={styles.taskMeta}>
-          {stamp ? (
-            <Text style={styles.taskDue}>
-              <Text style={styles.taskDueLabel}>Due </Text>
-              {stamp}
-            </Text>
-          ) : (
-            <Text style={styles.taskDue}>No due date</Text>
-          )}
-          {item.points !== undefined ? (
-            <Text style={styles.taskPoints}>{item.points}pts</Text>
-          ) : null}
-        </View>
+        <Text style={styles.taskDue} numberOfLines={1}>
+          {stamp ? `Due ${stamp}` : 'No due date'}
+        </Text>
       </View>
 
-      <TouchableOpacity onPress={onToggle} hitSlop={HIT}>
-        <View style={[styles.circle, done && styles.circleDone]}>
-          {done ? <Text style={styles.circleTick}>✓</Text> : null}
-        </View>
-      </TouchableOpacity>
+      {item.readOnly ? null : (
+        <TouchableOpacity onPress={onToggle} hitSlop={HIT}>
+          <View style={[styles.circle, done && styles.circleDone]}>
+            {done ? <Text style={styles.circleTick}>✓</Text> : null}
+          </View>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -249,129 +339,143 @@ function TaskRow({
 const HIT = {top: 10, bottom: 10, left: 10, right: 10};
 
 const styles = StyleSheet.create({
-  sheet: {
-    flex: 1,
-    backgroundColor: '#0c0c0c',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 18,
-    paddingTop: 10,
+  /**
+   * No panel background at all.
+   *
+   * Each card carries its own translucent fill, so the wallpaper shows between
+   * the rows and the panel reads as floating cards rather than a slab bolted to
+   * the side of the screen.
+   */
+  root: {flex: 1},
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
   },
-  grabber: {
-    alignSelf: 'center',
-    width: 42,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#3a3a3a',
-    marginBottom: 14,
+  tabBar: {flexDirection: 'row', gap: 6, flex: 1},
+  tab: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 11,
+    backgroundColor: 'rgba(15,23,42,0.78)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.25)',
+  },
+  tabActive: {backgroundColor: '#1d4ed8', borderColor: '#1d4ed8'},
+  tabLabel: {color: '#94a3b8', fontSize: 11, fontWeight: '700'},
+  tabLabelActive: {color: '#ffffff'},
+
+  minimize: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(15,23,42,0.86)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  minimizeGlyph: {
+    color: '#e2e8f0',
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: -2,
   },
 
-  tabBar: {flexDirection: 'row', gap: 6, marginBottom: 20},
-  tab: {
-    flex: 1,
-    height: 46,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabInactive: {backgroundColor: '#8f8f8f'},
-  tabActive: {backgroundColor: '#1c1c1c'},
-  tabGlyph: {fontSize: 20, color: '#1c1c1c'},
-  tabGlyphActive: {color: '#f2f2f2'},
-  badge: {
+  /** The minimised tab: same window, 54dp square. */
+  handle: {
     position: 'absolute',
-    top: 4,
-    left: 12,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 5,
-    backgroundColor: '#3b5bdb',
+    right: 0,
+    top: 0,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(15,23,42,0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 1,
   },
-  badgeText: {color: '#fff', fontSize: 11, fontWeight: '700'},
+  handleGlyph: {color: '#e2e8f0', fontSize: 17, fontWeight: '800'},
+  handleCount: {color: '#60a5fa', fontSize: 12, fontWeight: '800'},
 
   scroll: {flex: 1},
-  scrollInner: {paddingBottom: 28},
-  centered: {alignItems: 'center', paddingVertical: 60},
-  emptyTitle: {color: '#e8e8e8', fontSize: 17, fontWeight: '700'},
+  scrollInner: {paddingBottom: 10},
+  centered: {alignItems: 'center', paddingVertical: 34},
+  emptyTitle: {color: '#e2e8f0', fontSize: 14, fontWeight: '700'},
   emptyBody: {
-    color: '#7a7a7a',
-    fontSize: 13,
-    marginTop: 6,
+    color: '#94a3b8',
+    fontSize: 11,
+    marginTop: 4,
     textAlign: 'center',
+    paddingHorizontal: 12,
   },
 
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 18,
-    marginBottom: 10,
+    marginTop: 10,
+    marginBottom: 6,
   },
   sectionLabel: {
-    color: '#9a9a9a',
-    fontSize: 13,
+    color: '#94a3b8',
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 1.1,
+    letterSpacing: 0.9,
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowRadius: 2,
   },
-  chevron: {color: '#9a9a9a', fontSize: 16},
+  chevron: {color: '#94a3b8', fontSize: 13},
 
   task: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#131313',
+    alignItems: 'center',
+    backgroundColor: 'rgba(12,17,28,0.9)',
     borderWidth: 1,
-    borderColor: '#4a3c3c',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
+    borderColor: 'rgba(148,163,184,0.22)',
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 7,
   },
-  taskText: {flex: 1, paddingRight: 10},
-  taskContext: {color: '#9a9a9a', fontSize: 13},
+  taskText: {flex: 1, paddingRight: 8},
+  taskContext: {color: '#94a3b8', fontSize: 10},
   taskTitle: {
     color: '#ffffff',
-    fontSize: 19,
+    fontSize: 13,
     fontWeight: '700',
-    marginTop: 2,
+    marginTop: 1,
   },
-  taskTitleDone: {color: '#6a6a6a', textDecorationLine: 'line-through'},
-  taskMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 6,
-  },
-  taskDue: {color: '#9a9a9a', fontSize: 13},
-  taskDueLabel: {color: '#e0e0e0', fontWeight: '700'},
-  taskPoints: {color: '#9a9a9a', fontSize: 13},
+  taskTitleDone: {color: '#64748b', textDecorationLine: 'line-through'},
+  taskDue: {color: '#94a3b8', fontSize: 10, marginTop: 2},
+
   circle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: '#7a7a7a',
+    borderColor: '#94a3b8',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
   },
-  circleDone: {backgroundColor: '#3b5bdb', borderColor: '#3b5bdb'},
-  circleTick: {color: '#fff', fontSize: 13, fontWeight: '800'},
+  circleDone: {backgroundColor: '#22c55e', borderColor: '#22c55e'},
+  circleTick: {color: '#fff', fontSize: 12, fontWeight: '800'},
 
   addTask: {
-    backgroundColor: '#8f8f8f',
-    borderRadius: 14,
-    paddingVertical: 17,
+    backgroundColor: 'rgba(15,23,42,0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(148,163,184,0.25)',
+    borderRadius: 11,
+    paddingVertical: 9,
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: 8,
   },
-  addTaskText: {color: '#ffffff', fontSize: 16, fontWeight: '700'},
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 26,
-    marginTop: 16,
-  },
-  footerAction: {color: '#6a6a6a', fontSize: 13, fontWeight: '600'},
+  addTaskText: {color: '#e2e8f0', fontSize: 12, fontWeight: '700'},
+  footerRow: {flexDirection: 'row', justifyContent: 'center', marginTop: 8},
+  footerAction: {color: '#64748b', fontSize: 11, fontWeight: '600'},
 });

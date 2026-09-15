@@ -1,13 +1,14 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import {Focus, Overlay, RemindersApi} from '../native';
+import {XP_BAR_HEIGHT} from './XpBarOverlay';
 
 /** Idle: a small cross pinned to the top-right corner. */
 export const KILL_LAYOUT = {
   width: 44,
   height: 44,
   x: 10,
-  y: 14,
+  y: XP_BAR_HEIGHT + 6,
   gravity: 'topRight' as const,
   touchThrough: true,
   focusable: false,
@@ -21,7 +22,7 @@ export const KILL_LAYOUT_CONFIRM = {
   width: 200,
   height: 44,
   x: 10,
-  y: 104,
+  y: XP_BAR_HEIGHT + 96,
   gravity: 'topRight' as const,
   touchThrough: true,
   focusable: false,

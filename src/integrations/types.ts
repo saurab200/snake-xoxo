@@ -13,6 +13,13 @@ export type TodoItem = {
   /** 'tether' items are the user's own reminders, not pulled from a service. */
   source?: 'integration' | 'tether';
   done?: boolean;
+  /**
+   * A figure to read, not a job to do -- a streak count, minutes focused.
+   *
+   * Such rows carry no tick control: ticking pays XP, and a statistic that
+   * regenerates on every fetch is not something the user can complete.
+   */
+  readOnly?: boolean;
 };
 
 /** Add new payload shapes here as a union member, not as new props on a blob. */

@@ -32,7 +32,9 @@ modules, 6 overlays.
 | Blocking via accessibility service | Working |
 | Vanish mode (apps disappear) | Working, needs Device Owner |
 | Reminders → total lockout | Working |
-| Task card | Working; only 1 of 3 tabs wired |
+| Task panel (right edge, minimisable) | Working, verified |
+| Tick a task -> XP, row disappears | Working, verified |
+| XP bar pinned to the bezel | Working, verified across a reboot |
 | Integrations catalogue | Working; only Canvas is real |
 | Canvas API | **Never tested against a live instance** |
 | Kill switch (✕) | Working, verified — stops the session, leaves the snake |
@@ -85,12 +87,17 @@ packages are safe.
 
 ### Overlay resizes that happen "later" are timed in Kotlin
 
-`Overlay.setLayoutAfter(name, config, ms)` exists because `setTimeout` does not
-work for this. See §10 for the full story; the short version is that the
-overlays are on screen precisely when Tether is backgrounded, and in that state
-RN delivers neither JS timer callbacks nor the completion callbacks of
-native-driver animations. Anything that must happen when an animation ends has
-to be timed by a native `Handler`.
+`Overlay.setLayoutAfter(name, config, ms)` and `Overlay.showAfter(name, config,
+props, ms)` exist because `setTimeout` does not work for this. See §10 for the
+full story; the short version is that the overlays are on screen precisely when
+Tether is backgrounded, and in that state RN delivers neither JS timer callbacks
+nor the completion callbacks of native-driver animations. Anything that must
+happen after a delay, or when an animation ends, has to be timed by a native
+`Handler`.
+
+The same rule kills two tempting bits of UI polish: an XP bar that tweens its
+fill, and a "+10 XP" toast that fades out. Both would freeze part-way. Overlays
+paint their final state on every render.
 
 ### Do not clone into a path with a space
 
@@ -102,20 +109,27 @@ Gradle and the NDK fail in confusing ways. `~/code/tether` is fine.
 
 ```
 BOOT / app launch
-  └─ BootReceiver (if armed) ─► TetherService
+  └─ BootReceiver ─► TetherService
        ├─ Prefs.hydrate()        restore session + blocklist from disk
        ├─ RNBridge.ensureContext()  loads the JS bundle (no activity on boot)
        └─ 1s ticker ─► countdown, reminders, lockout expiry, AppHider.sync
 
 index.js (module scope, outlives every activity)
-  ├─ startSnake()          pins the snake; hides it while Tether is foreground
-  └─ startWidgetTrigger()  foreground-app events + task card on session start
+  ├─ initializeGamification()  hydrates points; installs the award listener
+  ├─ startSnake()              pins the snake, the XP bar and the X;
+  │                            hides them while Tether is foreground
+  └─ startWidgetTrigger()      foreground-app events + task panel on session start
 
 PULL THE TAIL
   └─ SnakeOverlay ─► Focus.startSession(minutes, blocklist)
        ├─ FocusSessionStore.start()   + persisted to Prefs
        ├─ AppHider.sync()             blocked apps vanish (Device Owner)
-       └─ ~3.8s later ─► TaskCardOverlay slides up
+       └─ Overlay.showAfter(3.8s) ─► TaskCardOverlay, timed in Kotlin
+
+TICK A TASK OFF / FINISH A SESSION
+  └─ gamificationStore.totalPoints
+       ├─ XpBarOverlay      fills toward the next level (25 XP)
+       └─ LeaderboardScreen ranks on the same number
 
 OPEN A BLOCKED APP
   └─ TetherAccessibilityService.onAccessibilityEvent
@@ -140,6 +154,17 @@ If you add something that must survive the user leaving the app, put it there.
 Two kill-switch bugs that used to live here were fixed in `0c439a4`; the detail
 is kept in §10 because the shape of both will recur.
 
+### The task panel is a dead zone for touches
+
+An overlay window receives every touch inside its own bounds. Taps that no React
+component handles are dropped, not forwarded to the app underneath -- so while
+the panel is open, the right-hand strip of the screen does not respond to the
+launcher. `touchThrough` only covers touches *outside* the window.
+
+This is why the panel is 286x430dp rather than full height, and why **›**
+minimises to a 54dp handle instead of merely being a nicety. There is no flag
+that fixes it; the mitigation is to keep the window small.
+
 ### Vanish mode loses home-screen shortcuts
 
 Hiding a package makes the launcher drop it from the saved home-screen layout.
@@ -158,10 +183,12 @@ it:
 adb shell dpm remove-active-admin com.tether/com.tether.admin.TetherDeviceAdmin
 ```
 
-### Two task-card tabs are inert
+### The task panel has no announcements tab
 
-By design, for now. Canvas exposes announcements and graded work, so both are a
-connector method away. They render but do nothing.
+The old three-tab bar had two inert tabs. The panel now has two working ones --
+To do and Done, the latter backed by `completedTaskIds` in the gamification
+store. Announcements were dropped rather than shipped dead: Canvas exposes them,
+so re-adding is a connector method plus a tab.
 
 ---
 
@@ -234,9 +261,12 @@ Then:
    Release around 45 min.
 3. It coils, holds, and **crawls back into the bezel**. A timer pill and a `+`
    appear beside it.
-4. **The task card slides up** — what you owe, grouped by due date.
-5. **Open YouTube** — the icon is *gone from the launcher*. Not blocked: absent.
-6. **Tap the ✕ twice** — everything stops.
+4. **The task panel appears on the right** — what you owe, grouped by due date.
+5. **Tick something off** — the row goes and the bar at the top of the screen
+   fills. Tap **›** to minimise the panel to an edge handle.
+6. **Open YouTube** — the icon is *gone from the launcher*. Not blocked: absent.
+7. **Tap the ✕ twice** — the session stops and the apps come back. The snake and
+   the XP bar stay: they are permanent.
 
 Record a backup video. Accessibility permissions are flaky live, and a Device
 Owner app cannot be force-stopped if something goes wrong on stage.
@@ -257,10 +287,11 @@ after the demo, expensive during it.
 
 ---
 
-## 10. Two bugs worth learning from
+## 10. Three bugs worth learning from
 
-Both were in the kill switch — the one control that has to work when everything
-else has gone wrong. Both are fixed; the shape of them will recur.
+Two were in the kill switch — the one control that has to work when everything
+else has gone wrong. The third is the one that keeps coming back. All are fixed;
+the shape of them will recur.
 
 ### Unmounting the component that is running your handler
 
@@ -322,6 +353,14 @@ edge case. Before relying on any callback, ask whether it is delivered when no
 activity exists. Native events (the 1s ticker) and native handlers are; JS
 timers and animation callbacks are not.
 
+The same bug was found a third time in `widgetTrigger.ts`: the task panel was
+shown by `setTimeout(..., 3800)` so it would not collide with the snake crawling
+home. It therefore **never appeared on a real session start** -- only when
+something else happened to be driving the JS thread. `Overlay.showAfter` fixed
+it. Three instances in one file each is enough to call it the house rule:
+
+> If it happens later, Kotlin owns the clock.
+
 Worth knowing: the earlier "timer pill sits too low on screen" bug was this bug.
 It was treated as a layout problem and patched with a 30dp inset, which made the
 pills look right inside the stuck 440dp window. Both the inset and the stuck
@@ -354,3 +393,47 @@ intentional: the overlay would otherwise sit on top of the app's own UI.
 **If you are tempted to let something remove the snake, don't.** There is no
 in-app path back to it any more, because there is no longer meant to be a state
 it can be missing from.
+
+---
+
+## 12. XP, levels and the leaderboard
+
+One number, `totalPoints`, in `src/state/gamificationStore.ts`. Everything reads
+it: the leaderboard ranks on it, skins unlock from it, and the bar across the top
+of the screen shows progress through the current level.
+
+Two things pay into it:
+
+| Action | XP |
+|---|---|
+| Sitting out a whole focus session | 1 per minute |
+| Ticking a task off | `XP_PER_TASK` (10) |
+
+Levels are **derived**, never stored: `levelInfoFor(points)`, 25 XP per level.
+There is no second currency and nothing to migrate.
+
+### Ticking a task
+
+`completeTask(id)` credits the XP and records the id in `completedTaskIds`, which
+does double duty: it is the dedup record AND the reason a ticked task stays gone
+when the panel reloads. Tasks are re-fetched from Canvas on every open, so
+without it a refresh would resurrect everything the user had just cleared.
+`uncompleteTask(id)` gives the XP back, so a tick cannot be farmed by toggling.
+
+Rows marked `readOnly` (the Focus-stats rows: streak, minutes today, distractions
+blocked) render without a tick control. They are figures that regenerate on every
+fetch, so "completing" one is meaningless -- and would have been free XP.
+
+### Ticking does NOT fire an AwardEvent
+
+`AwardEvent` means "a focus session completed" and exists to drive a celebration.
+A tick is small and frequent; a card for each one would be unbearable. The XP bar
+watches plain store state, so it still moves.
+
+### Kept deliberately in step with `feature/reward-overlay-and-levels`
+
+The levels and `AwardEvent` code in the store was taken **verbatim** from Ali's
+branch rather than reinvented, so that when it merges the two sides make an
+identical change and git has nothing to reconcile. If you touch `XP_PER_LEVEL`,
+`levelInfoFor`, `AwardEvent` or `awardPoints`, check that branch first -- a
+gratuitous difference there turns a clean merge into a manual one.

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import {Focus, Overlay} from '../native';
 import {useGamification} from '../state/gamificationStore';
+import {XP_BAR_HEIGHT} from './XpBarOverlay';
 import {Storage} from '../state/storage';
 import {formatRemaining, useFocusSession} from '../state/useFocusSession';
 
@@ -153,10 +154,20 @@ const SEGMENT_DATA: Segment[] = buildSpiral();
 const SEGMENTS = SEGMENT_DATA.length;
 
 
+/**
+ * Every snake window is pushed down by the XP bar's height.
+ *
+ * The bar is bolted to the bezel and spans the full width, so without this the
+ * tail would hang behind it. Offsetting here keeps "the snake lives in the
+ * bezel" true -- it now hangs from the bar rather than from the screen edge.
+ */
+const TOP_OFFSET = XP_BAR_HEIGHT;
+
 /** At rest the snake is in the bezel, so this only has to fit the tail. */
 export const SNAKE_LAYOUT = {
   width: 96,
   height: 64,
+  y: TOP_OFFSET,
   gravity: 'top' as const,
   touchThrough: true,
   focusable: false,
@@ -197,6 +208,7 @@ const RETRACT_MS = 450;
 export const SNAKE_LAYOUT_DRAGGING = {
   width: 170,
   height: 440,
+  y: TOP_OFFSET,
   gravity: 'top' as const,
   touchThrough: true,
   focusable: false,
@@ -206,6 +218,7 @@ export const SNAKE_LAYOUT_DRAGGING = {
 export const SNAKE_LAYOUT_ACTIVE = {
   width: 320,
   height: 104,
+  y: TOP_OFFSET,
   gravity: 'top' as const,
   touchThrough: true,
   focusable: false,

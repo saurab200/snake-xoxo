@@ -93,7 +93,9 @@ export type OverlayOptions = {
     | 'topLeft'
     | 'topRight'
     | 'bottomLeft'
-    | 'bottomRight';
+    | 'bottomRight'
+    | 'left'
+    | 'right';
   /** true => this window can take key input (e.g. swallow the back button) */
   focusable?: boolean;
   /** true => taps outside this window reach the app underneath */
@@ -114,6 +116,22 @@ export const Overlay = {
     props?: Record<string, unknown>,
   ): Promise<boolean> =>
     TetherOverlay.show(name, options ?? null, props ?? null),
+
+  /**
+   * Show once `delayMs` has passed, timed by the native main looper.
+   *
+   * Use this rather than `setTimeout(() => show(...))`. Overlays are wanted
+   * precisely when Tether is backgrounded, and JS timers do not run then -- a
+   * delayed show written in JS simply never happens. A `hide` or an immediate
+   * `show` of the same overlay cancels a pending one.
+   */
+  showAfter: (
+    name: string,
+    options: OverlayOptions,
+    props: Record<string, unknown> | null,
+    delayMs: number,
+  ): Promise<boolean> =>
+    TetherOverlay.showAfter(name, options, props, delayMs),
 
   /** Resize/move without remounting React -- component state survives. */
   setLayout: (name: string, options: OverlayOptions): Promise<boolean> =>

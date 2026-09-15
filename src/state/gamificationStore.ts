@@ -45,6 +45,52 @@ export function skinById(id: string): Skin | undefined {
 }
 
 /* ------------------------------------------------------------------ */
+/* Levels                                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Flat curve, on purpose.
+ *
+ * A ramping curve is more elegant, but flat is instantly legible: one finished
+ * 25-minute session is always exactly one level. That readability matters more
+ * than elegance when someone is watching a two-minute demo, and it fills the
+ * dead stretch between skin unlocks where nothing else visibly moves.
+ *
+ * Levels are DERIVED from totalPoints, never stored -- so there is no extra
+ * persisted state, nothing to migrate, and the level can never disagree with
+ * the point total.
+ */
+export const XP_PER_LEVEL = 25;
+
+export type LevelInfo = {
+  level: number;
+  /** XP earned inside the current level. */
+  xpIntoLevel: number;
+  /** XP needed to span one level. */
+  xpForLevel: number;
+  /** XP still to earn before levelling up. */
+  xpToNext: number;
+  /** 0..1, for the progress bar. */
+  progress: number;
+};
+
+export function levelForPoints(points: number): number {
+  return Math.floor(Math.max(0, points) / XP_PER_LEVEL) + 1;
+}
+
+export function levelInfoFor(points: number): LevelInfo {
+  const safe = Math.max(0, points);
+  const xpIntoLevel = safe % XP_PER_LEVEL;
+  return {
+    level: levelForPoints(safe),
+    xpIntoLevel,
+    xpForLevel: XP_PER_LEVEL,
+    xpToNext: XP_PER_LEVEL - xpIntoLevel,
+    progress: xpIntoLevel / XP_PER_LEVEL,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* State                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -53,18 +99,61 @@ export type GamificationState = {
   activeSkin: string;
   /** Fingerprints of sessions already credited, for restart-safe dedup. */
   creditedSessionIds: string[];
+  /**
+   * Ids of tasks the user has ticked off.
+   *
+   * Does double duty: it is why a ticked task stays gone when the panel is
+   * reopened, AND the dedup record that stops the same task being credited
+   * twice. Tasks are re-fetched from Canvas on every load, so without this a
+   * refresh would resurrect everything the user had just cleared.
+   */
+  completedTaskIds: string[];
 };
 
 /** Cap the dedup list so it can never grow without bound. */
 const MAX_CREDITED_IDS = 50;
 
+/** XP for ticking off one task. Flat, for the same reason levels are flat. */
+export const XP_PER_TASK = 10;
+
+/** Cap the completed-task list the same way the session list is capped. */
+const MAX_COMPLETED_TASKS = 200;
+
 let state: GamificationState = {
   totalPoints: 0,
   activeSkin: DEFAULT_SKIN_ID,
   creditedSessionIds: [],
+  completedTaskIds: [],
 };
 
 const listeners = new Set<() => void>();
+
+/**
+ * Fired ONCE per credited session, after the points have landed.
+ *
+ * Separate from the plain state subscription because celebrating is a discrete
+ * event, not a state value: a re-render must never re-trigger it. The store
+ * stays free of UI concerns -- src/state/rewardTrigger.ts listens and shows the
+ * overlay, the same split widgetTrigger.ts uses for Person B -> Person C.
+ */
+export type AwardEvent = {
+  pointsAwarded: number;
+  totalPoints: number;
+  previousLevel: number;
+  level: number;
+  leveledUp: boolean;
+  /** Skins whose threshold this award crossed. Usually empty. */
+  unlockedSkins: Skin[];
+};
+
+const awardListeners = new Set<(e: AwardEvent) => void>();
+
+export function subscribeAward(listener: (e: AwardEvent) => void): () => void {
+  awardListeners.add(listener);
+  return () => {
+    awardListeners.delete(listener);
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /* Reads                                                               */
@@ -153,12 +242,77 @@ function awardPoints(sessionId: string, points: number): void {
   if (state.creditedSessionIds.includes(sessionId)) {
     return; // already credited this exact session -- no duplicate points
   }
+
+  const before = state.totalPoints;
+  const after = before + points;
+
   const creditedSessionIds = [...state.creditedSessionIds, sessionId].slice(
     -MAX_CREDITED_IDS,
   );
+  commit({totalPoints: after, creditedSessionIds});
+
+  const event: AwardEvent = {
+    pointsAwarded: points,
+    totalPoints: after,
+    previousLevel: levelForPoints(before),
+    level: levelForPoints(after),
+    leveledUp: levelForPoints(after) > levelForPoints(before),
+    // Thresholds crossed by this award, so the overlay can call them out.
+    unlockedSkins: SKINS.filter(
+      s => s.requiredPoints > before && s.requiredPoints <= after,
+    ),
+  };
+
+  awardListeners.forEach(l => {
+    try {
+      l(event);
+    } catch {
+      /* a failing celebration must never cost the user their points */
+    }
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Task completion -> points                                           */
+/* ------------------------------------------------------------------ */
+
+export function isTaskCompleted(taskId: string): boolean {
+  return state.completedTaskIds.includes(taskId);
+}
+
+/**
+ * Credit a ticked task and remember that it is done.
+ *
+ * Returns the XP actually awarded -- 0 if this task was already credited, so
+ * the caller can skip the "+XP" flourish rather than lie about it.
+ *
+ * Deliberately does NOT fire an AwardEvent. That channel means "a focus session
+ * completed" and drives the celebration card; a tick is a small, frequent act
+ * and popping a full-screen card for each one would be unbearable. The XP bar
+ * watches plain state, so it still moves.
+ */
+export function completeTask(taskId: string): number {
+  if (!taskId || isTaskCompleted(taskId)) {
+    return 0;
+  }
+  const completedTaskIds = [...state.completedTaskIds, taskId].slice(
+    -MAX_COMPLETED_TASKS,
+  );
   commit({
-    totalPoints: state.totalPoints + points,
-    creditedSessionIds,
+    totalPoints: state.totalPoints + XP_PER_TASK,
+    completedTaskIds,
+  });
+  return XP_PER_TASK;
+}
+
+/** Untick: gives the XP back, so the tick cannot be farmed by toggling. */
+export function uncompleteTask(taskId: string): void {
+  if (!isTaskCompleted(taskId)) {
+    return;
+  }
+  commit({
+    totalPoints: Math.max(0, state.totalPoints - XP_PER_TASK),
+    completedTaskIds: state.completedTaskIds.filter(id => id !== taskId),
   });
 }
 
@@ -245,7 +399,13 @@ function sanitize(raw: unknown): GamificationState {
     activeSkin = DEFAULT_SKIN_ID;
   }
 
-  return {totalPoints, activeSkin, creditedSessionIds};
+  const completedTaskIds = Array.isArray(obj.completedTaskIds)
+    ? obj.completedTaskIds
+        .filter(id => typeof id === 'string')
+        .slice(-MAX_COMPLETED_TASKS)
+    : [];
+
+  return {totalPoints, activeSkin, creditedSessionIds, completedTaskIds};
 }
 
 let initialized = false;
@@ -298,13 +458,14 @@ export function initializeGamification(): void {
 /* React hook                                                          */
 /* ------------------------------------------------------------------ */
 
-export type UseGamification = GamificationState & {
-  skins: Skin[];
-  activeSkinObj: Skin;
-  activeSkinColor: string;
-  isSkinUnlocked: (id: string) => boolean;
-  setActiveSkin: (id: string) => boolean;
-};
+export type UseGamification = GamificationState &
+  LevelInfo & {
+    skins: Skin[];
+    activeSkinObj: Skin;
+    activeSkinColor: string;
+    isSkinUnlocked: (id: string) => boolean;
+    setActiveSkin: (id: string) => boolean;
+  };
 
 export function useGamification(): UseGamification {
   const [snap, setSnap] = useState<GamificationState>(getGamificationState());
@@ -322,6 +483,7 @@ export function useGamification(): UseGamification {
 
   return {
     ...snap,
+    ...levelInfoFor(snap.totalPoints),
     skins: SKINS,
     activeSkinObj,
     activeSkinColor: activeSkinObj.color,

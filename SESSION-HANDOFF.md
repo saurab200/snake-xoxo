@@ -49,9 +49,11 @@ React Native 0.75.4 + a Kotlin layer. Android only.
 
 - **Apps tab** with a "+ Add an app" catalogue. Canvas connects for real; Google
   Classroom, Notion and Todoist are listed as unavailable on purpose.
-- **Task card** slides up when a session starts, built to the supplied design:
-  segmented tab bar, collapsible `DUE IN N DAYS` headings, rows with course,
-  title, `Due 09/16 at 5:37pm` and points.
+- **Task panel** slides in from the right edge when a session starts: no
+  background of its own, compact rows, collapsible `DUE IN N DAYS` headings, and
+  a **›** that minimises it to a handle on the edge rather than closing it.
+- **Tick a task** and the row disappears and pays 10 XP. Ticks persist, so a
+  refresh from Canvas cannot resurrect what you cleared.
 - Canvas assignments and your own reminders land in one list.
 - **Reminders**: add a task with a due date and lock duration; when it falls due
   Tether goes into a **total lockout** — blocked apps close on sight, no exit.
@@ -62,6 +64,10 @@ React Native 0.75.4 + a Kotlin layer. Android only.
 - Points unlock snake skins: Green 0 / Blue 30 / Gold 120. The active skin
   re-tints the whole snake and its pills.
 - **Rank** tab with a leaderboard.
+- **XP bar** bolted to the bezel across the top of the screen, with the snake
+  hanging from it. Every point earned -- a ticked task, or a session sat out to
+  the end -- lands in the same pot the leaderboard ranks on, and fills the bar
+  toward the next level (25 XP each).
 - Sessions are credited once, keyed on a persisted fingerprint, so repeated
   events and app restarts cannot double-award.
 
@@ -107,6 +113,9 @@ reading the result.
 | Integrations catalogue | Verified |
 | Points, dedup, skins tinting the snake | Verified after the merge |
 | Kill switch: stops the session, leaves the snake | Verified |
+| Task panel: right edge, minimise, expand | Verified |
+| Tick -> row disappears, XP bar fills | Verified (5/25 -> 15/25) |
+| XP bar survives a reboot | Verified |
 | Snake returns after a reboot, app never opened | Verified |
 | Overlay window resizes across pull / session / stop | Verified, 3 cycles |
 | **Canvas against a live instance** | **Never tested** |
@@ -185,7 +194,11 @@ of disappearing.
 3. **Decide whether `feature/taskui` merges into `main` or `develop`.**
 4. **Ask Ali** whether the bezel tail should use his `palette.accent` — his
    peek-nub tinting was dropped with the nub it belonged to.
-5. **Warn before enabling vanish mode** — it loses home-screen shortcuts.
+5. **Merge `feature/reward-overlay-and-levels`** (Ali's newest). The levels and
+   `AwardEvent` code in `gamificationStore.ts` was copied from that branch
+   verbatim so the two sides make an identical change — keep it that way or the
+   merge stops being free. HANDOFF.md §12.
+6. **Warn before enabling vanish mode** — it loses home-screen shortcuts.
 
 ---
 
@@ -220,16 +233,20 @@ Next up:
 
 ## 9. Demo script
 
-1. **Home screen** — the tail hangs from the bezel, small and ignorable.
+1. **Home screen** — the XP bar runs along the bezel and the snake's tail hangs
+   from it, small and ignorable.
 2. **Pull the tail down** — it uncoils, duration climbs. Release around 45 min.
 3. It coils, holds, then **crawls back into the bezel**. Timer and `+` pills
    appear beside it.
-4. **The task card slides up** — what you owe, grouped by due date.
-5. **Open YouTube** — the icon is *gone from the launcher*. Not blocked: absent.
-6. **Finish a session** → points land, and a skin can be equipped to recolour the
-   snake.
-7. **Tap the ✕ twice** — the session stops and the blocked apps come back. The
-   snake stays in the bezel, where it always is.
+4. **The task panel slides in from the right** — what you owe, grouped by due
+   date, floating over the wallpaper with no panel behind it.
+5. **Tick a task** — the row disappears and the bar at the top visibly fills.
+   Tap **›** to minimise the panel to an edge handle.
+6. **Open YouTube** — the icon is *gone from the launcher*. Not blocked: absent.
+7. **Finish a session** → a minute is a point, the bar fills further, and a skin
+   can be equipped to recolour the snake and the bar.
+8. **Tap the ✕ twice** — the session stops and the blocked apps come back. The
+   snake and the XP bar stay, where they always are.
 
 Record a backup video. Accessibility permissions are flaky live, and a Device
 Owner app cannot be force-stopped if something goes sideways on stage.

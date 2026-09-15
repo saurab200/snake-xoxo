@@ -43,6 +43,9 @@ object OverlayManager {
      */
     private val pendingLayouts = mutableMapOf<String, Runnable>()
 
+    /** Overlays scheduled to APPEAR later by showAfter, one per overlay. */
+    private val pendingShows = mutableMapOf<String, Runnable>()
+
     /**
      * Overlays that must stay above every other overlay.
      *
@@ -79,6 +82,7 @@ object OverlayManager {
             return
         }
         main.post {
+            cancelPendingShow(name) // this show supersedes any scheduled one
             if (views.containsKey(name)) {
                 // Already up -- just push new props.
                 views[name]?.appProperties = props ?: Bundle()
@@ -139,8 +143,43 @@ object OverlayManager {
         }
     }
 
+    /**
+     * Show LATER, timed natively.
+     *
+     * Same reason as setLayoutAfter: a `setTimeout` in JS does not fire while
+     * Tether is backgrounded, which is exactly when an overlay is wanted. The
+     * task card is delayed a few seconds after a session starts so it does not
+     * collide with the snake crawling home, and on a JS timer that delay meant
+     * it never appeared at all.
+     *
+     * A hide() or an immediate show() of the same overlay cancels it -- so a
+     * card queued for a session that has already ended cannot arrive late.
+     */
+    fun showAfter(
+        context: Context,
+        name: String,
+        config: Config,
+        props: Bundle?,
+        delayMs: Long,
+    ) {
+        val app = context.applicationContext
+        main.post {
+            cancelPendingShow(name)
+            val task = Runnable {
+                pendingShows.remove(name)
+                show(app, name, config, props)
+            }
+            pendingShows[name] = task
+            main.postDelayed(task, delayMs.coerceAtLeast(0L))
+        }
+    }
+
     private fun cancelPending(name: String) {
         pendingLayouts.remove(name)?.let { main.removeCallbacks(it) }
+    }
+
+    private fun cancelPendingShow(name: String) {
+        pendingShows.remove(name)?.let { main.removeCallbacks(it) }
     }
 
     /** Main thread only. */
@@ -167,6 +206,7 @@ object OverlayManager {
         val app = context.applicationContext
         main.post {
             cancelPending(name)
+            cancelPendingShow(name) // a queued show must not resurrect this
             val view = views.remove(name) ?: return@post
             params.remove(name)
             try {
@@ -240,6 +280,8 @@ object OverlayManager {
         "topRight" -> Gravity.TOP or Gravity.END
         "bottomLeft" -> Gravity.BOTTOM or Gravity.START
         "bottomRight" -> Gravity.BOTTOM or Gravity.END
+        "right" -> Gravity.CENTER_VERTICAL or Gravity.END
+        "left" -> Gravity.CENTER_VERTICAL or Gravity.START
         else -> Gravity.TOP or Gravity.CENTER_HORIZONTAL
     }
 }
