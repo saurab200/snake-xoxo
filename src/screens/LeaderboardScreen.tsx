@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import {useAuth} from '../state/authStore';
 import {useGamification} from '../state/gamificationStore';
 
 /**
@@ -102,10 +103,14 @@ type Row = LeaderboardEntry & {rank: number; isMe: boolean};
 const ME_ID = 'local-user';
 
 /** Splice the local score into the board and rank the whole thing. */
-function buildRows(entries: LeaderboardEntry[], myPoints: number): Row[] {
+function buildRows(
+  entries: LeaderboardEntry[],
+  myPoints: number,
+  myName: string,
+): Row[] {
   const combined: LeaderboardEntry[] = [
     ...entries.filter(e => e.id !== ME_ID),
-    {id: ME_ID, username: 'You', points: myPoints},
+    {id: ME_ID, username: myName, points: myPoints},
   ];
 
   return combined
@@ -115,6 +120,9 @@ function buildRows(entries: LeaderboardEntry[], myPoints: number): Row[] {
 
 export default function LeaderboardScreen() {
   const {totalPoints} = useGamification();
+  // Show who is signed in rather than a generic "You". Still a local row -- the
+  // board itself has no backend -- but it is at least the user's own identity.
+  const {user} = useAuth();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -128,7 +136,7 @@ export default function LeaderboardScreen() {
     load();
   }, [load]);
 
-  const rows = buildRows(entries, totalPoints);
+  const rows = buildRows(entries, totalPoints, user?.name?.trim() || 'You');
 
   return (
     <View style={styles.root}>

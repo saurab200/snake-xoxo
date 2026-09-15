@@ -14,6 +14,8 @@ const KEYS = {
   canvasToken: 'canvas.token',
   canvasHost: 'canvas.host',
   gamification: 'gamification.state',
+  authSession: 'auth.session',
+  authAccounts: 'auth.accounts',
 } as const;
 
 export const Storage = {
@@ -44,4 +46,26 @@ export const Storage = {
 
   setGamification: (json: string): Promise<boolean> =>
     TetherStorage.setItem(KEYS.gamification, json),
+
+  /**
+   * Signed-in session: name, email, authenticated. NEVER a password.
+   *
+   * Written as '' to clear, because TetherStorage has no remove() -- readers
+   * treat an empty string the same as absent.
+   */
+  getAuthSession: (): Promise<string | null> =>
+    TetherStorage.getItem(KEYS.authSession),
+
+  setAuthSession: (json: string): Promise<boolean> =>
+    TetherStorage.setItem(KEYS.authSession, json),
+
+  /**
+   * Locally created demo accounts (name + email only), kept separately from the
+   * session so that logging out does not forget who signed up.
+   */
+  getAuthAccounts: (): Promise<string | null> =>
+    TetherStorage.getItem(KEYS.authAccounts),
+
+  setAuthAccounts: (json: string): Promise<boolean> =>
+    TetherStorage.setItem(KEYS.authAccounts, json),
 };
