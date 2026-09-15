@@ -62,6 +62,11 @@ React Native 0.75.4 + a Kotlin layer. Android only.
 
 ### Gamification (Person 4 / D — Ali)
 
+- **Reward card** pops over whatever app you are in the moment a session
+  completes, counting the XP up. It waits for a tap when it fires in the
+  background — see HANDOFF.md §3.
+- **Focus tab** shows your level, the progress track and XP to the next level.
+
 - 1 point per minute of a completed session; cancelled sessions earn nothing.
 - Points unlock snake skins: Green 0 / Blue 30 / Gold 120. The active skin
   re-tints the whole snake and its pills.
@@ -85,14 +90,15 @@ React Native 0.75.4 + a Kotlin layer. Android only.
 ## 3. Branch topology
 
 ```
-main                          d8c3bff   snake + blocking + tasks (no gamification)
-feature/gamification-rewards  ad98e4e   Ali's work, untouched
-develop                       f5b8051   gamification merged in
-feature/taskui                8b2e689   ← EVERYTHING. Work here.
+main                              d8c3bff  snake + blocking + tasks (no gamification)
+feature/gamification-rewards      ad98e4e  Ali's first slice
+feature/reward-overlay-and-levels 60b5ce3  Ali's reward card + levels
+develop                           63d1a44  both of Ali's slices
+feature/taskui                    ←        EVERYTHING. Work here.
 ```
 
-`feature/taskui` is the only branch with all four slices. `main` does **not**
-have gamification yet.
+`feature/taskui` is the only branch with all four slices **and** both of Ali's.
+`main` does not have gamification at all.
 
 The merge was smaller than expected: Ali's SnakeOverlay change was colour-only
 and built on top of the arc-length spiral, so only two files conflicted. Details
@@ -196,11 +202,7 @@ of disappearing.
 3. **Decide whether `feature/taskui` merges into `main` or `develop`.**
 4. **Ask Ali** whether the bezel tail should use his `palette.accent` — his
    peek-nub tinting was dropped with the nub it belonged to.
-5. **Merge `feature/reward-overlay-and-levels`** (Ali's newest). The levels and
-   `AwardEvent` code in `gamificationStore.ts` was copied from that branch
-   verbatim so the two sides make an identical change — keep it that way or the
-   merge stops being free. HANDOFF.md §12.
-6. **Warn before enabling vanish mode** — it loses home-screen shortcuts.
+5. **Warn before enabling vanish mode** — it loses home-screen shortcuts.
 
 ---
 

@@ -39,6 +39,8 @@ modules, 6 overlays.
 | Canvas API | **Never tested against a live instance** |
 | Kill switch (✕) | Working, verified — stops the session, leaves the snake |
 | Gamification: points, skins, leaderboard | Working, verified after the merge |
+| Reward card on session completion | Merged from develop |
+| Level pill + progress on the Focus tab | Merged from develop |
 | Haptics | **Unverified** — emulator has no vibrator |
 
 Everything marked "verified" was checked by running it on an emulator and reading
@@ -450,10 +452,23 @@ fetch, so "completing" one is meaningless -- and would have been free XP.
 A tick is small and frequent; a card for each one would be unbearable. The XP bar
 watches plain store state, so it still moves.
 
-### Kept deliberately in step with `feature/reward-overlay-and-levels`
+### That merge has now happened
 
-The levels and `AwardEvent` code in the store was taken **verbatim** from Ali's
-branch rather than reinvented, so that when it merges the two sides make an
-identical change and git has nothing to reconcile. If you touch `XP_PER_LEVEL`,
-`levelInfoFor`, `AwardEvent` or `awardPoints`, check that branch first -- a
-gratuitous difference there turns a clean merge into a manual one.
+`origin/develop` (Ali's reward overlay + levels) is merged in. The verbatim copy
+did its job: the store conflict was cosmetic, because this branch's copy is a
+strict **superset** of develop's -- every difference is an addition.
+
+One real trap, for whoever merges anything else from that side: develop's
+`HomeScreen` imports `PEEK_NOW_EVENT` and `setSnakePeeking`, which belong to the
+old peek snake design this branch deleted when the snake moved into the bezel.
+They do not compile here. Git drops the button that used them on its own, but
+the imports have to go by hand.
+
+### The reward card waits for a tap
+
+When a session completes over another app, `RewardOverlay` appears and stays
+until tapped (or until Tether is next opened -- it has its own AppState listener
+for that). Its 4.6s auto-dismiss is a JS timer and cannot run while Tether is
+backgrounded. Ali found this independently and designed the card to paint its
+finished state on first frame rather than fade in, which is why it appears at
+all. Left as designed; know it before demoing.
