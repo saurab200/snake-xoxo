@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Tether</string>
-    <string name="accessibility_service_label">Tether app blocking</string>
-    <string name="accessibility_service_description">Lets Tether see which app is in the foreground so it can block distracting apps during a focus session. Tether does not read screen content.</string>
+    <string name="app_name">Medusa</string>
+    <string name="accessibility_service_label">Medusa app blocking</string>
+    <string name="accessibility_service_description">Lets Medusa see which app is in the foreground so it can block distracting apps during a focus session. Medusa does not read screen content.</string>
 </resources>

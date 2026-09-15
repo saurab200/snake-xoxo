@@ -25,11 +25,11 @@ kill switch is now an exit, so that line is slightly untrue. Either soften the
 wording or hide the kill switch during a lockout to make it literally true.
 Product call, not a technical one.
 
-## Vanish mode: apps disappear from Tether's own list too
+## Vanish mode: apps disappear from Medusa's own list too
 
 `AppList.installed()` queries launchable activities, and a hidden app has no
 launchable activity -- so while a session is running, blocked apps also vanish
-from Tether's own Blocked tab. You can see the count drop (20 apps -> 19) but
+from Medusa's own Blocked tab. You can see the count drop (20 apps -> 19) but
 cannot untick the app that is currently hidden.
 
 "Restore all apps now" on that screen is the workaround. A better fix would be
@@ -56,8 +56,8 @@ unhiding re-registers the app but nothing puts the shortcut back where the user
 had it. So blocking Instagram a few times quietly rearranges someone's home
 screen.
 
-Not a bug in Tether -- it is how launchers react to a package disappearing --
+Not a bug in Medusa -- it is how launchers react to a package disappearing --
 but it makes vanish mode mildly destructive to a layout the user chose. Worth
 warning about in the UI before anyone enables it on a phone they care about, or
 worth reconsidering against the launcher approach (option 2 in the original
-blocking decision), where Tether owns the grid and can dim in place instead.
+blocking decision), where Medusa owns the grid and can dim in place instead.

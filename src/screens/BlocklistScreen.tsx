@@ -19,12 +19,14 @@ export default function BlocklistScreen() {
   const [loading, setLoading] = useState(true);
   const [serviceOn, setServiceOn] = useState(true);
   const [deviceOwner, setDeviceOwner] = useState(false);
+  const [protectedPkgs, setProtectedPkgs] = useState<Set<string>>(new Set());
   const [hiddenCount, setHiddenCount] = useState(0);
 
   const recheckService = useCallback(async () => {
     setServiceOn(await Blocking.isAccessibilityEnabled());
     try {
       setDeviceOwner(await Blocking.isDeviceOwner());
+      setProtectedPkgs(new Set(await Blocking.getProtectedPackages()));
       setHiddenCount(await Blocking.getHiddenCount());
     } catch {
       /* older build without the device-owner bridge */
@@ -77,6 +79,9 @@ export default function BlocklistScreen() {
   }
 
   async function toggle(pkg: string) {
+    if (protectedPkgs.has(pkg)) {
+      return; // refused in AppHider too; this just stops the tick looking real
+    }
     const next = new Set(blocked);
     if (next.has(pkg)) {
       next.delete(pkg);
@@ -194,18 +199,22 @@ export default function BlocklistScreen() {
         }
         renderItem={({item}) => {
           const on = blocked.has(item.packageName);
+          const locked = protectedPkgs.has(item.packageName);
           return (
             <TouchableOpacity
-              style={styles.row}
+              style={[styles.row, locked && styles.rowLocked]}
+              disabled={locked}
               onPress={() => toggle(item.packageName)}>
               <Text style={[styles.check, on && styles.checkOn]}>
-                {on ? '■' : '□'}
+                {locked ? '—' : on ? '■' : '□'}
               </Text>
               <View style={styles.rowText}>
                 <Text style={[styles.label, on && styles.labelOn]}>
                   {item.label}
                 </Text>
-                <Text style={styles.pkg}>{item.packageName}</Text>
+                <Text style={styles.pkg}>
+                  {locked ? 'Needed to use the phone' : item.packageName}
+                </Text>
               </View>
             </TouchableOpacity>
           );
@@ -276,6 +285,7 @@ const styles = StyleSheet.create({
   clear: {color: '#1f6feb', fontSize: 12, fontWeight: '600'},
   empty: {color: '#6e7681', fontSize: 13, paddingTop: 20},
   row: {flexDirection: 'row', alignItems: 'center', paddingVertical: 10},
+  rowLocked: {opacity: 0.45},
   rowText: {flex: 1},
   check: {color: '#8b949e', fontSize: 16, width: 28},
   checkOn: {color: '#1f6feb'},

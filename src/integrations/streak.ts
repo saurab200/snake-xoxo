@@ -24,6 +24,8 @@ export const StreakIntegration: ProductivityIntegration = {
     return {
       type: 'todoList',
       items: [
+        // Claimable like any other row. Stable ids, so completedTaskIds lets
+        // each be claimed exactly once however often the stats refresh.
         {id: 'streak', title: 'Focus streak', context: '3 days'},
         {id: 'today', title: 'Focused today', context: '1h 15m'},
         {id: 'blocked', title: 'Distractions blocked', context: '7 attempts'},

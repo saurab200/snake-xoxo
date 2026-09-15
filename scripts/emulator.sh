@@ -77,7 +77,7 @@ grant() {
     echo "permissions granted (overlay, notifications, accessibility)"
   else
     echo "WARNING: accessibility did not stick (got '$got')."
-    echo "Enable it by hand: Settings > Accessibility > Tether app blocking."
+    echo "Enable it by hand: Settings > Accessibility > Medusa app blocking."
   fi
 }
 

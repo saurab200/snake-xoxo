@@ -1,9 +1,9 @@
 # PERSON D - Gamification Agent Brief
 
 ## 1. Context and Objective
-You are building the **Gamification Slice (Rewards & Leaderboard)** for Tether, a React Native + Kotlin Android app. 
+You are building the **Gamification Slice (Rewards & Leaderboard)** for Medusa, a React Native + Kotlin Android app. 
 
-Tether lets users drag a snake down to set a focus timer, blocking distracting apps. Your job is to make focusing rewarding. When a user completes a focus session, they earn points (1 point per minute). These points unlock "Snake Skins" (colors). You will also build a Leaderboard screen to compare scores.
+Medusa lets users drag a snake down to set a focus timer, blocking distracting apps. Your job is to make focusing rewarding. When a user completes a focus session, they earn points (1 point per minute). These points unlock "Snake Skins" (colors). You will also build a Leaderboard screen to compare scores.
 
 **CRITICAL HACKATHON CONSTRAINTS:**
 * **No heavy backend SDKs:** Do not install the Firebase or Supabase JS SDKs. If you need network calls, use standard `fetch()` to a REST endpoint.

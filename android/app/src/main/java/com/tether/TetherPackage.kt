@@ -5,6 +5,7 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 import com.tether.modules.BlockingModule
+import com.tether.modules.ClockModule
 import com.tether.modules.FocusModule
 import com.tether.modules.OverlayModule
 import com.tether.modules.PermissionsModule
@@ -17,6 +18,7 @@ class TetherPackage : ReactPackage {
         listOf(
             FocusModule(context),
             OverlayModule(context),
+            ClockModule(context),
             BlockingModule(context),
             PermissionsModule(context),
             StorageModule(context),

@@ -1,10 +1,16 @@
-# Tether
+# Medusa
 
 Drag a snake down from the top of the screen to set a focus timer. While the timer
 runs, distracting apps are blocked and productivity widgets (Canvas first) float in
 the corner.
 
 **Android only.** React Native + a thin Kotlin layer.
+
+The Android package is `com.tether`, not `com.medusa` — the app was renamed to
+Medusa at the label only, because the applicationId is what the Device Owner
+provisioning, the accessibility grant and the user's saved data all hang off.
+Every `com.tether` in this file is a working identifier, not a stale one. See
+[HANDOFF.md §9](HANDOFF.md).
 
 ---
 
@@ -72,7 +78,7 @@ Never commit it.
 
 ### No Android phone? Use the emulator.
 
-Everything Tether needs works on an emulator: system overlays, the accessibility
+Everything Medusa needs works on an emulator: system overlays, the accessibility
 service, foreground services, and network. You do **not** need a physical device to
 develop or to verify any of the three slices.
 
@@ -232,6 +238,17 @@ src/integrations/cache.ts                               widget data cache
 Adding a second integration = write one object implementing `ProductivityIntegration`,
 add it to the array in `registry.ts`. Nothing else changes.
 
+### Person 4 (Person D) — Gamification
+```
+src/state/gamificationStore.ts                          points, levels, skins, dedup
+src/overlays/XpBarOverlay.tsx                           the bar across the bezel
+src/overlays/TaskCardOverlay.tsx                        task panel; ticking pays XP
+src/screens/LeaderboardScreen.tsx                       the Rank tab
+```
+**Consumes:** session-completion events, and `completeTask()` from the task panel.
+**Produces:** `totalPoints` — the single number skins, levels and the leaderboard
+all read.
+
 ---
 
 ## Do not block on each other
@@ -269,7 +286,7 @@ Delete that section once the real path works end to end.
 2. **Debug builds need Metro.** If your laptop's WiFi drops, the app is a white screen.
    Build a release APK for the actual demo:
    `cd android && ./gradlew assembleRelease`
-3. **Battery optimisation kills the service.** Settings → Apps → Tether → Battery →
+3. **Battery optimisation kills the service.** Settings → Apps → Medusa → Battery →
    Unrestricted.
 4. **Overlays do not appear over some system screens.** Demo over a normal app
    (Instagram, Chrome), never over Settings.

@@ -36,6 +36,29 @@ class OverlayModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(true)
     }
 
+    /**
+     * Show after a delay, timed natively.
+     *
+     * JS timers do not fire while Tether is backgrounded -- see OverlayManager.
+     */
+    @ReactMethod
+    fun showAfter(
+        name: String,
+        options: ReadableMap?,
+        props: ReadableMap?,
+        delayMs: Double,
+        promise: Promise,
+    ) {
+        OverlayManager.showAfter(
+            reactContext,
+            name,
+            configFrom(options),
+            props?.let { Arguments.toBundle(it) },
+            delayMs.toLong(),
+        )
+        promise.resolve(true)
+    }
+
     /** Resize or move a visible overlay. Remounts nothing -- React state is preserved. */
     @ReactMethod
     fun setLayout(name: String, options: ReadableMap?, promise: Promise) {
@@ -43,10 +66,36 @@ class OverlayModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(true)
     }
 
+    /**
+     * Resize after a delay, timed natively.
+     *
+     * For resizes that have to happen when an animation finishes: JS timers and
+     * animation callbacks are not delivered while Tether is backgrounded, which
+     * is when the overlays are actually on screen. See OverlayManager.
+     */
+    @ReactMethod
+    fun setLayoutAfter(name: String, options: ReadableMap?, delayMs: Double, promise: Promise) {
+        OverlayManager.setLayoutAfter(reactContext, name, configFrom(options), delayMs.toLong())
+        promise.resolve(true)
+    }
+
     /** Push new props into an already-visible overlay without re-creating it. */
     @ReactMethod
     fun update(name: String, props: ReadableMap, promise: Promise) {
         OverlayManager.update(name, Arguments.toBundle(props) ?: Bundle())
+        promise.resolve(true)
+    }
+
+    /**
+     * Remove after a delay, timed natively.
+     *
+     * What guarantees a transient overlay leaves the screen. A JS timer would
+     * not fire while Tether is backgrounded, which is the only state these
+     * windows are ever seen in -- so the flourish would simply stay there.
+     */
+    @ReactMethod
+    fun hideAfter(name: String, delayMs: Double, promise: Promise) {
+        OverlayManager.hideAfter(reactContext, name, delayMs.toLong())
         promise.resolve(true)
     }
 
@@ -75,6 +124,7 @@ class OverlayModule(private val reactContext: ReactApplicationContext) :
         gravity = options?.takeIf { it.hasKey("gravity") }?.getString("gravity") ?: "top",
         focusable = options.boolOr("focusable", false),
         touchThrough = options.boolOr("touchThrough", true),
+        touchable = options.boolOr("touchable", true),
     )
 
     private fun ReadableMap?.intOr(key: String, fallback: Int): Int =

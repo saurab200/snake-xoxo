@@ -4,7 +4,7 @@ You are implementing the slice owned by **Person 2**, referred to throughout thi
 repository as **Person B**. Both names mean the same person: the code comments and
 the README say "Person B", the team says "Person 2".
 
-The project is Tether, an Android focus app. The repository already contains a
+The project is Medusa, an Android focus app. The repository already contains a
 working skeleton — your job is to finish and harden one vertical slice of it, not
 to build the app from scratch.
 
@@ -46,7 +46,7 @@ churn. The reasoning is in a comment on `IGNORED`; do not "fix" it back.
 
 ## 1. Mission
 
-Tether blocks distracting apps during a focus session. **You own the blocking.**
+Medusa blocks distracting apps during a focus session. **You own the blocking.**
 
 When a focus session is active and the user opens Instagram, your code must detect
 it within milliseconds and put a full-screen "blocked" wall in front of them.
@@ -437,7 +437,7 @@ adb shell settings put secure enabled_accessibility_services ""
    blocklist before any JS runs.
    ```bash
    adb shell am force-stop com.tether
-   # then open a blocked app directly, without opening Tether first
+   # then open a blocked app directly, without opening Medusa first
    ```
    The wall must still appear if a session is active (this depends on Person 1's
    Task 5 session persistence — coordinate).

@@ -52,6 +52,14 @@ class BlockingModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(AppHider.isDeviceOwner(reactContext))
     }
 
+    /** Packages Tether refuses to hide -- launcher, dialer, Settings, keyboard. */
+    @ReactMethod
+    fun getProtectedPackages(promise: Promise) {
+        val array = Arguments.createArray()
+        AppHider.protectedPackages(reactContext).forEach { array.pushString(it) }
+        promise.resolve(array)
+    }
+
     @ReactMethod
     fun getHiddenCount(promise: Promise) {
         promise.resolve(AppHider.hiddenCount(reactContext))

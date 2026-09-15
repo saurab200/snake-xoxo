@@ -23,25 +23,7 @@ class FocusModule(private val reactContext: ReactApplicationContext) :
     /** Start the foreground service. Call once the user has granted permissions. */
     @ReactMethod
     fun arm(promise: Promise) {
-        Prefs.setArmed(reactContext, true)
         TetherService.start(reactContext)
-        promise.resolve(true)
-    }
-
-    /**
-     * Whether the snake should be on screen at all. Cleared by the kill switch
-     * and honoured across reboots, so JS must ask before re-arming itself.
-     */
-    @ReactMethod
-    fun isArmed(promise: Promise) {
-        promise.resolve(Prefs.isArmed(reactContext))
-    }
-
-    @ReactMethod
-    fun disarm(promise: Promise) {
-        // Stays off through a reboot -- see BootReceiver.
-        Prefs.setArmed(reactContext, false)
-        TetherService.stop(reactContext)
         promise.resolve(true)
     }
 

@@ -76,20 +76,22 @@ export function startWidgetTrigger(): void {
    * Starting a session raises the obvious question -- focus on WHAT? -- so the
    * task card answers it, once the snake has finished crawling home.
    */
-  let cardTimer: ReturnType<typeof setTimeout> | null = null;
-
   TetherEvents.onSessionChanged(state => {
-    if (cardTimer) {
-      clearTimeout(cardTimer);
-      cardTimer = null;
-    }
-
     if (state.isActive) {
-      cardTimer = setTimeout(() => {
-        Overlay.show('TaskCardOverlay', TASK_CARD_LAYOUT, {
-          nonce: Date.now(),
-        }).catch(() => {});
-      }, CARD_DELAY_MS);
+      /**
+       * Scheduled natively, NOT with setTimeout.
+       *
+       * A session almost always starts with Tether backgrounded, and JS timers
+       * do not fire in that state -- on a setTimeout this card never appeared
+       * at all. Overlay.hide() below cancels a pending show, so a card queued
+       * for a session that has already ended cannot arrive late.
+       */
+      Overlay.showAfter(
+        'TaskCardOverlay',
+        TASK_CARD_LAYOUT,
+        {nonce: Date.now()},
+        CARD_DELAY_MS,
+      ).catch(() => {});
       return;
     }
 

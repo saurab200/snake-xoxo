@@ -4,7 +4,7 @@ You are implementing the slice owned by **Person 1**, referred to throughout thi
 repository as **Person A**. Both names mean the same person: the code comments and
 the README say "Person A", the team says "Person 1".
 
-The project is Tether, an Android focus app. The repository already contains a
+The project is Medusa, an Android focus app. The repository already contains a
 working skeleton — your job is to finish and polish one vertical slice of it, not
 to build the app from scratch.
 
@@ -50,7 +50,7 @@ background foreground-service start.
 
 ## 1. Mission
 
-Tether blocks distracting apps during a focus session. The session is started by
+Medusa blocks distracting apps during a focus session. The session is started by
 **dragging a "snake" down from the top of the screen** — a floating handle that
 sits on top of every other app. Drag distance sets the timer length.
 
@@ -540,7 +540,7 @@ cd android && ./gradlew :app:compileDebugKotlin
 | All overlays render nothing after a config change | `newArchEnabled=true` | Set it back to `false` (C1) |
 | Kotlin edits have no effect | Metro reload does not rebuild native | `npm run android` |
 | Overlay vanishes when leaving the app | Foreground service not running | Call `Focus.arm()` before `Overlay.show()` |
-| Service dies after a few minutes | Battery optimisation | Settings → Apps → Tether → Battery → Unrestricted |
+| Service dies after a few minutes | Battery optimisation | Settings → Apps → Medusa → Battery → Unrestricted |
 | `bad interpreter: /bin/sh^M` | CRLF line endings from a Windows commit | `.gitattributes` forces LF; `git rm --cached -r . && git reset --hard` |
 | Build fails with `SourcesChanges` | A dependency needs a newer Kotlin | Remove it (C3) |
 | Drag stutters | `setState` per frame | Task 1 |
