@@ -70,7 +70,7 @@ export default function AuthWelcomeScreen() {
         <View style={styles.hero}>
           <SnakeMark size={86} />
           <Text style={styles.wordmark}>MEDUSA</Text>
-          <Text style={styles.tagline}>Welcome to focus Maxxing</Text>
+          <Text style={styles.tagline}>Focusmaxxing unleash</Text>
         </View>
 
         <View style={styles.pitch}>

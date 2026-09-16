@@ -1,6 +1,6 @@
 import {AppState} from 'react-native';
 import {Focus, Overlay, Permissions} from '../native';
-import {KILL_LAYOUT} from '../overlays/KillSwitchOverlay';
+import {ADD_TASK_LAYOUT} from '../overlays/AddTaskOverlay';
 import {SNAKE_LAYOUT, SNAKE_LAYOUT_ACTIVE} from '../overlays/SnakeOverlay';
 import {XP_BAR_LAYOUT} from '../overlays/XpBarOverlay';
 
@@ -39,7 +39,7 @@ async function showSnake() {
      * those awaits routinely outlast the app coming to the foreground: the
      * listener below fires 'active' and hides overlays that have not been
      * created yet, then these shows land on top of Tether's own UI. The snake
-     * and the X then sit over the app until the next background trip.
+     * then sits over the app until the next background trip.
      */
     if (AppState.currentState === 'active') {
       return;
@@ -62,10 +62,17 @@ async function showSnake() {
       isActive ? SNAKE_LAYOUT_ACTIVE : SNAKE_LAYOUT,
     );
 
-    // The panic button travels with the snake -- it has to be reachable in
-    // exactly the situations where the snake is visible. It re-raises itself
-    // above anything added later, so it stays clear of both.
-    await Overlay.show('KillSwitchOverlay', KILL_LAYOUT);
+    /**
+     * The third permanent fixture, and it goes up LAST on purpose.
+     *
+     * Its window overlaps the snake's at the top-right on a narrow screen, and
+     * z-order among overlay windows is add-order -- so showing it before the
+     * snake would put the button underneath and make it unpressable during a
+     * session. It is also why "add a task" is no longer a pill inside the
+     * snake: that pill only existed during a session, so the only way to note
+     * a task down was to start one first.
+     */
+    await Overlay.show('AddTaskOverlay', ADD_TASK_LAYOUT, {});
   } catch {
     /* native not ready yet; the AppState hook below retries */
   }
@@ -90,7 +97,7 @@ export function startSnake(): void {
   const apply = (state: string) => {
     if (state === 'active') {
       Overlay.hide('SnakeOverlay').catch(() => {});
-      Overlay.hide('KillSwitchOverlay').catch(() => {});
+      Overlay.hide('AddTaskOverlay').catch(() => {});
       Overlay.hide('TaskCardOverlay').catch(() => {});
       Overlay.hide('XpBarOverlay').catch(() => {});
     } else {

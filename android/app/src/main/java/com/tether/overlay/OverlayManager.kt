@@ -60,10 +60,13 @@ object OverlayManager {
      * Overlays that must stay above every other overlay.
      *
      * Window z-order among TYPE_APPLICATION_OVERLAY windows is add-order, so the
-     * full-screen block wall -- added later -- buried the panic button and made it
-     * unreachable during a lockout, which is exactly when it matters most.
+     * full-screen block wall -- added later -- buries anything pinned to the
+     * bezel. This used to hold the panic button, which has been removed; it now
+     * holds the add-task button, which is pinned to the corner permanently and
+     * so has the same problem: a control the user is told is always there must
+     * not quietly disappear the moment a wall goes up in front of it.
      */
-    private val ALWAYS_ON_TOP = setOf("KillSwitchOverlay")
+    private val ALWAYS_ON_TOP = setOf("AddTaskOverlay")
 
     const val MATCH_PARENT = -1
     const val WRAP_CONTENT = -2

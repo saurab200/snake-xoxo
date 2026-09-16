@@ -1,4 +1,5 @@
 import {useEffect, useState} from 'react';
+import {switchGamificationUser} from './gamificationStore';
 import {Storage} from './storage';
 
 /**
@@ -239,6 +240,10 @@ export function initializeAuth(): void {
       if (sessionRaw) {
         const user = parseUser(JSON.parse(sessionRaw));
         if (user) {
+          // Restoring a session is a sign-in too: point the gamification store
+          // at this account before the tabs render, or the app would come back
+          // from a cold start showing zero until something else moved.
+          await switchGamificationUser(user.email);
           commit({isAuthenticated: true, user});
         }
       }
@@ -258,6 +263,10 @@ async function signIn(user: AuthUser): Promise<void> {
   rememberAccount(user);
   await persistAccounts();
   await persistSession(user);
+  // Load THIS account's progress before showing the tabs, so the home screen's
+  // first paint is already the right person's points rather than the previous
+  // user's total being corrected a frame later.
+  await switchGamificationUser(user.email);
   commit({isAuthenticated: true, user});
 }
 
@@ -306,6 +315,11 @@ export async function continueWithEmail(
  */
 export async function logout(): Promise<void> {
   await persistSession(null);
+  // Detach the signed-out account's progress from memory. The stored copy is
+  // left alone -- signing back in with the same address restores it, which is
+  // what the sign-out copy promises -- but it is no longer on screen for, or
+  // writable by, whoever signs in next.
+  await switchGamificationUser(null);
   commit({isAuthenticated: false, user: null});
 }
 

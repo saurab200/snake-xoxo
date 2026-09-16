@@ -40,12 +40,35 @@ export const Storage = {
   /**
    * Gamification snapshot, persisted as a single JSON blob (points + active
    * skin + credited-session dedup metadata). One key keeps it atomic.
+   *
+   * LEGACY, kept for migration only. This key is not per-account, so everyone
+   * who signed in on a device read and wrote the same points -- a second user
+   * inherited the first user's progress. Live reads/writes now go through the
+   * *ForUser variants below; this one is only consulted once, to adopt an
+   * existing blob into the first account that signs in after the upgrade.
    */
   getGamification: (): Promise<string | null> =>
     TetherStorage.getItem(KEYS.gamification),
 
   setGamification: (json: string): Promise<boolean> =>
     TetherStorage.setItem(KEYS.gamification, json),
+
+  /**
+   * Per-account gamification, keyed by normalised email.
+   *
+   * Progress is part of someone's identity, so it hangs off the account rather
+   * than the device: a returning email gets its own points back, and a new one
+   * starts at zero instead of adopting a stranger's.
+   *
+   * The blocklist deliberately does NOT work this way -- the accessibility
+   * service reads it natively before any JS runs, so it has no signed-in user
+   * to key on and stays a device-level setting.
+   */
+  getGamificationForUser: (email: string): Promise<string | null> =>
+    TetherStorage.getItem(`${KEYS.gamification}.${email}`),
+
+  setGamificationForUser: (email: string, json: string): Promise<boolean> =>
+    TetherStorage.setItem(`${KEYS.gamification}.${email}`, json),
 
   /**
    * Signed-in session: name, email, authenticated. NEVER a password.

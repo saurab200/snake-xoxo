@@ -1,7 +1,6 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
   AppState,
-  DeviceEventEmitter,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,15 +10,11 @@ import {
 import {
   Blocking,
   Focus,
-  FocusState,
-  Overlay,
   PermissionStatus,
   Permissions,
   RemindersApi,
 } from '../native';
 import RewardBadge from '../components/RewardBadge';
-import {REWARD_LAYOUT} from '../overlays/RewardOverlay';
-import {WIDGET_LAYOUT} from '../overlays/WidgetOverlay';
 import {logout, useAuth} from '../state/authStore';
 import {rearm, startSnake} from '../state/bootstrap';
 import {useGamification} from '../state/gamificationStore';
@@ -37,9 +32,6 @@ export default function HomeScreen() {
   const game = useGamification();
   const auth = useAuth();
   const [perms, setPerms] = useState<PermissionStatus>(EMPTY_PERMS);
-  /** Dev only: lets the duplicate-event test re-send the identical payload. */
-  const lastSimulated = useRef<FocusState | null>(null);
-
 
   const refreshPerms = useCallback(async () => {
     setPerms(await Permissions.getStatus());
@@ -173,138 +165,52 @@ export default function HomeScreen() {
           muted
         />
         <Text style={styles.hint}>
-          A ✕ sits in the top-right corner. Tap it twice to end whatever is
-          running — session, lockout, task card — from anywhere. The snake
-          itself stays put: it lives on your screen from install onward.
+          A + sits in the top-right corner. Tap it to add a task from anywhere,
+          without starting a session first. Like the snake, it lives on your
+          screen from install onward.
+        </Text>
+        <Text style={styles.hint}>
+          To stop early, use End focus mode below, or the notification.
         </Text>
       </Section>
 
-      <Section title="3 · Session">
+      <Section title="3 · Focus">
         <Text style={styles.status}>
-          {session.isActive
+          {session.isLockedOut
+            ? `Focus mode · ${formatRemaining(session.lockoutRemainingMs)} left`
+            : session.isActive
             ? `Active · ${formatRemaining(session.remainingMs)} left`
             : 'Idle'}
         </Text>
-        <View style={styles.row}>
-          <Button
-            label="Start 1 min"
-            onPress={async () =>
-              Focus.startSession(1, await Storage.getBlocklist())
-            }
-          />
-          <Button
-            label="Start 25 min"
-            onPress={async () =>
-              Focus.startSession(25, await Storage.getBlocklist())
-            }
-          />
-        </View>
-        <Button label="Stop" onPress={() => Focus.stopSession()} muted />
-      </Section>
 
-      {/*
-        INTEGRATION STUBS -- use these so nobody is blocked waiting on someone
-        else's real implementation. Delete once the real path works end to end.
-      */}
-      <Section title="Dev · simulate">
         <Button
-          label="Show block overlay"
-          onPress={() =>
-            Overlay.show(
-              'BlockOverlay',
-              {
-                width: Overlay.MATCH_PARENT,
-                height: Overlay.MATCH_PARENT,
-                gravity: 'center',
-                focusable: true,
-                touchThrough: false,
-              },
-              {appLabel: 'Instagram', packageName: 'com.instagram.android'},
-            )
+          label="Start 25 min"
+          onPress={async () =>
+            Focus.startSession(25, await Storage.getBlocklist())
           }
-          muted
         />
+
+        {/*
+          ONE stop, because there are two ways to be in focus and the user
+          should not have to know which one they are in.
+
+          A session and a reminder-triggered focus mode are separate states
+          natively, and each has its own native call -- so a button wired to
+          just one of them looks broken exactly half the time. This ends
+          whichever is running, and does nothing gracefully when neither is.
+
+          This is also the ONLY way out of focus mode now that the ✕ overlay is
+          gone, so it is a product control rather than the dev stub it used to
+          be. Do not demote it back.
+        */}
         <Button
-          label="Show Canvas widget"
-          onPress={() =>
-            Overlay.show('WidgetOverlay', WIDGET_LAYOUT, {
-              integrationId: 'canvas',
-            })
-          }
-          muted
-        />
-        <Button
-          label="Add a task / reminder"
-          onPress={() =>
-            Overlay.show(
-              'ReminderOverlay',
-              {
-                width: Overlay.MATCH_PARENT,
-                height: Overlay.MATCH_PARENT,
-                gravity: 'center',
-                focusable: true,
-                touchThrough: false,
-              },
-              {},
-            )
-          }
-          muted
-        />
-        <Button
-          label="Trigger 2 min lockout"
-          onPress={() => RemindersApi.startLockout(2, 'Demo lockout')}
-          muted
-        />
-        <Button
-          label="End lockout"
-          onPress={() => RemindersApi.stopLockout()}
-          muted
-        />
-        <Button
-          label="Award 30 min session (+30 pts)"
-          onPress={() => {
-            // Exactly the shape the native layer sends, plus the completion flag.
-            const event = {
-              isActive: false,
-              durationMinutes: 30,
-              endAtMs: Date.now(),
-              remainingMs: 0,
-              remainingMinutes: 0,
-              completedSuccessfully: true,
-            };
-            lastSimulated.current = event;
-            DeviceEventEmitter.emit('tether:session', event);
+          label="End focus mode"
+          onPress={async () => {
+            await Focus.stopSession().catch(() => {});
+            await RemindersApi.stopLockout().catch(() => {});
           }}
           muted
         />
-        <Button
-          label="Preview reward popup (+25 XP)"
-          onPress={() =>
-            Overlay.show('RewardOverlay', REWARD_LAYOUT, {
-              nonce: Date.now(),
-              pointsAwarded: 25,
-            })
-          }
-          muted
-        />
-        <Text style={styles.hint}>
-          Shows the celebration without awarding anything. Press Home first to
-          see it float over another app — that is where it really appears.
-        </Text>
-        <Button
-          label="Re-emit that session (should add 0)"
-          onPress={() => {
-            if (lastSimulated.current) {
-              DeviceEventEmitter.emit('tether:session', lastSimulated.current);
-            }
-          }}
-          muted
-        />
-        <Text style={styles.hint}>
-          Dedup check: the second button re-sends the identical completion event
-          and the point total must not move.
-        </Text>
-        <Button label="Hide all overlays" onPress={Overlay.hideAll} muted />
       </Section>
 
       <Section title="Account">

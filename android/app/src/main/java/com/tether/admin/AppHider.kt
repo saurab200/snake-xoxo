@@ -4,6 +4,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.provider.Settings
 import android.provider.Telephony
 import android.telecom.TelecomManager
@@ -167,15 +168,78 @@ object AppHider {
         val hidden = Prefs.getStringSet(context, KEY_HIDDEN)
         if (hidden.isEmpty()) return
 
+        // GOTCHA: setApplicationHidden() reports refusal by RETURNING FALSE, not
+        // by throwing -- so a catch-only version of this loop cannot tell a
+        // restore that worked from one that silently did nothing. Clearing the
+        // record regardless then strands those packages: they stay hidden at the
+        // OS level while hiddenCount() reads 0, which removes the "Restore all
+        // apps now" affordance and leaves the user no way back.
+        //
+        // So: keep every package we did NOT get back, and only drop the ones the
+        // system confirmed. A stuck package stays in the record, stays counted,
+        // and stays offered for retry.
+        val stuck = mutableSetOf<String>()
+
         hidden.forEach { pkg ->
-            try {
+            // A package that is no longer installed cannot be hidden OR restored,
+            // and keeping it would mean retrying it forever and reporting a
+            // phantom "1 app still hidden" the user can never clear. Uninstalled
+            // since we hid it, or carried over from another device -- either way
+            // it is not ours to worry about any more, so drop it.
+            if (!isInstalled(context, pkg)) {
+                Log.w(TAG, "dropping $pkg from the hidden record -- not installed")
+                return@forEach
+            }
+
+            val stillHidden = try {
                 dpm(context).setApplicationHidden(admin(context), pkg, false)
+                // Trust the SYSTEM, not the return value. setApplicationHidden()
+                // reports "did I change anything", so it is false both when the
+                // call was refused and when the package was already visible --
+                // treating that as failure would strand packages that are
+                // perfectly fine. Asking what the state actually is now
+                // distinguishes the two.
+                dpm(context).isApplicationHidden(admin(context), pkg)
             } catch (e: Exception) {
                 Log.e(TAG, "could not restore $pkg", e)
+                true
+            }
+            if (stillHidden) {
+                Log.e(TAG, "restore refused for $pkg -- still hidden")
+                stuck.add(pkg)
             }
         }
-        Prefs.setStringSet(context, KEY_HIDDEN, emptySet())
+
+        Prefs.setStringSet(context, KEY_HIDDEN, stuck)
+        if (stuck.isNotEmpty()) {
+            Log.e(TAG, "${stuck.size} of ${hidden.size} package(s) could not be restored")
+        }
+
+        // "Not hidden" is what we applied, whether or not every package obeyed.
+        // Recording it as still-hidden would make the next sync() tick try the
+        // whole set again, once per tick, forever. Anything that refused stays
+        // in the record above, so the Blocked screen keeps offering a manual
+        // retry -- which is the right place for it, not a hot loop.
         lastAppliedHidden = false
+    }
+
+    /**
+     * Whether the package is present for this user at all.
+     *
+     * GOTCHA: MATCH_UNINSTALLED_PACKAGES is not optional here. A hidden app is
+     * reported as NOT installed by a default lookup -- which is every package
+     * this function is ever asked about, since we only ask about ones we hid.
+     * Without the flag this returns false for all of them and the restore loop
+     * "helpfully" drops the entire record instead of unhiding anything.
+     */
+    private fun isInstalled(context: Context, pkg: String): Boolean = try {
+        context.packageManager.getApplicationInfo(
+            pkg,
+            PackageManager.MATCH_UNINSTALLED_PACKAGES,
+        )
+        true
+    } catch (e: Exception) {
+        false
     }
 
     fun hiddenCount(context: Context): Int =

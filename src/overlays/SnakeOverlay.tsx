@@ -543,7 +543,7 @@ export default function SnakeOverlay() {
    * It used to be set in the spring's completion callback, which closes over the
    * session value from the render that created it. On release that value is
    * still "idle" -- startSession() has not resolved yet -- so the window snapped
-   * back to the narrow idle width and clipped the + pill off the right edge.
+   * back to the narrow idle width and clipped the timer pill off the right edge.
    */
   const resting = session.isActive || session.isLockedOut;
 
@@ -587,7 +587,7 @@ export default function SnakeOverlay() {
     );
   }
 
-  // --- active: coil + the two pills ---------------------------------------
+  // --- active: coil + the timer pill ---------------------------------------
   const lockedOut = session.isLockedOut;
   const label = lockedOut
     ? formatRemaining(session.lockoutRemainingMs)
@@ -608,25 +608,7 @@ export default function SnakeOverlay() {
         ]}
         onPress={() => !lockedOut && Focus.stopSession()}>
         <Text style={styles.pillText}>{label}</Text>
-        {lockedOut ? <Text style={styles.pillSub}>locked</Text> : null}
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.plusPill, {backgroundColor: palette.head}]}
-        onPress={() =>
-          Overlay.show(
-            'ReminderOverlay',
-            {
-              width: Overlay.MATCH_PARENT,
-              height: Overlay.MATCH_PARENT,
-              gravity: 'center',
-              focusable: true,
-              touchThrough: false,
-            },
-            {},
-          )
-        }>
-        <Text style={styles.plusText}>+</Text>
+        {lockedOut ? <Text style={styles.pillSub}>focus</Text> : null}
       </TouchableOpacity>
     </View>
   );
@@ -667,11 +649,11 @@ const styles = StyleSheet.create({
   /**
    * Pinned to the TOP, not centred.
    *
-   * Centring meant the pills sat at the vertical middle of whatever the window
+   * Centring meant the pill sat at the vertical middle of whatever the window
    * happened to be, which is only the right answer once it has settled at
-   * 104dp. Aligning to the top makes their position independent of the window
-   * height, so the timer and + appear directly under the status bar during the
-   * crawl home and do not move afterwards. The window itself already starts
+   * 104dp. Aligning to the top makes its position independent of the window
+   * height, so the timer appears directly under the status bar during the
+   * crawl home and does not move afterwards. The window itself already starts
    * below the status bar, so no extra inset is needed.
    */
   activeRow: {
@@ -747,14 +729,4 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   pillSub: {color: '#fecaca', fontSize: 9, fontWeight: '700'},
-  plusPill: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#16a34a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 6,
-  },
-  plusText: {color: '#fff', fontSize: 24, fontWeight: '700', marginTop: -3},
 });

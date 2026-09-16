@@ -48,7 +48,7 @@ export default function BlockOverlay(props: Props) {
   if (lockedOut) {
     return (
       <View style={[styles.root, styles.locked]}>
-        <Text style={styles.lockBadge}>TOTAL LOCKOUT</Text>
+        <Text style={styles.lockBadge}>FOCUS MODE</Text>
         <Text style={styles.label}>{label}</Text>
         <Text style={styles.title}>was closed</Text>
 
@@ -59,7 +59,7 @@ export default function BlockOverlay(props: Props) {
         <Text style={[styles.timer, styles.timerLocked]}>
           {formatRemaining(session.lockoutRemainingMs)}
         </Text>
-        <Text style={styles.timerCaption}>until apps unlock</Text>
+        <Text style={styles.timerCaption}>until apps come back</Text>
 
         <Text style={styles.lockNote}>
           No early exit during a lockout. Go do the thing.

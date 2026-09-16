@@ -119,12 +119,70 @@ export const XP_PER_TASK = 10;
 /** Cap the completed-task list the same way the session list is capped. */
 const MAX_COMPLETED_TASKS = 200;
 
-let state: GamificationState = {
+const EMPTY_STATE: GamificationState = {
   totalPoints: 0,
   activeSkin: DEFAULT_SKIN_ID,
   creditedSessionIds: [],
   completedTaskIds: [],
 };
+
+let state: GamificationState = {...EMPTY_STATE};
+
+/**
+ * Whose progress `state` currently holds -- normalised email, or null when
+ * nobody is signed in.
+ *
+ * Progress is per-account, not per-device. Without this every account on a
+ * phone shared the same points: sign out, sign in with a different address,
+ * and you inherited the previous person's total, skins and cleared tasks.
+ *
+ * Kept here rather than read from authStore to avoid a circular import --
+ * authStore calls switchGamificationUser() as part of signing in and out.
+ */
+let currentUser: string | null = null;
+
+/**
+ * XP that has been banked but is still in the air.
+ *
+ * The points land in the store the moment the tick is pressed -- they have to,
+ * or a JS thread that stops waking would lose them -- but the BAR read straight
+ * from that total, so it jumped before the +10 token had even been drawn. The
+ * token then flew to a bar that had already moved, which is why the flight
+ * looked like it was not happening: there was nothing left for it to deliver.
+ *
+ * So the total is banked immediately and the DISPLAY holds this much back until
+ * the flight lands. Only ever a presentation delay -- persistence, dedup and
+ * skin unlocks all keep using the true total.
+ */
+let withheldXp = 0;
+
+export function getWithheldXp(): number {
+  return withheldXp;
+}
+
+/** Hold `amount` back from the bar while its token is in flight. */
+export function withholdXp(amount: number): void {
+  if (amount <= 0) {
+    return;
+  }
+  withheldXp += amount;
+  emit();
+}
+
+/**
+ * Let everything in flight land at once.
+ *
+ * Clears the whole balance rather than one flight's worth: tick two tasks in
+ * quick succession and the second flight's landing should leave the bar showing
+ * the real total, not still owing the first one.
+ */
+export function releaseWithheldXp(): void {
+  if (withheldXp === 0) {
+    return;
+  }
+  withheldXp = 0;
+  emit();
+}
 
 const listeners = new Set<() => void>();
 
@@ -206,11 +264,68 @@ function commit(next: Partial<GamificationState>): void {
 }
 
 async function persist(): Promise<void> {
+  // Signed out there is no account to attribute progress to, so drop it rather
+  // than writing it somewhere the next person would pick it up.
+  if (!currentUser) {
+    return;
+  }
   try {
-    await Storage.setGamification(JSON.stringify(state));
+    await Storage.setGamificationForUser(currentUser, JSON.stringify(state));
   } catch {
     /* persistence best-effort; state still lives in memory this session */
   }
+}
+
+/**
+ * Point the store at an account: load that user's progress, or clear to zero
+ * when signing out.
+ *
+ * Called by authStore on sign-in and sign-out. Safe to call repeatedly with the
+ * same email -- re-entering the same account is a no-op rather than a reload,
+ * so an in-flight session's credit cannot be clobbered by a redundant call.
+ *
+ * MIGRATION: the pre-account build kept one device-wide blob. The first account
+ * to sign in after upgrading adopts it, so the person already using the app
+ * keeps their points instead of being reset to zero by the fix. Subsequent
+ * accounts find their own (absent) key and correctly start fresh.
+ */
+export async function switchGamificationUser(
+  email: string | null,
+): Promise<void> {
+  const next = email ? email.trim().toLowerCase() : null;
+  if (next === currentUser) {
+    return;
+  }
+
+  currentUser = next;
+
+  if (!next) {
+    state = {...EMPTY_STATE};
+    emit();
+    return;
+  }
+
+  let loaded: GamificationState | null = null;
+  try {
+    const raw = await Storage.getGamificationForUser(next);
+    if (raw) {
+      loaded = sanitize(JSON.parse(raw));
+    } else {
+      const legacy = await Storage.getGamification();
+      if (legacy) {
+        loaded = sanitize(JSON.parse(legacy));
+        // Claim it for this account, then retire the shared key so the next
+        // account to sign in cannot adopt it too.
+        await Storage.setGamificationForUser(next, JSON.stringify(loaded));
+        await Storage.setGamification('');
+      }
+    }
+  } catch {
+    /* corrupt or missing state simply means "this account starts at zero" */
+  }
+
+  state = loaded ?? {...EMPTY_STATE};
+  emit();
 }
 
 /* ------------------------------------------------------------------ */
@@ -420,18 +535,12 @@ export function initializeGamification(): void {
   }
   initialized = true;
 
-  // Hydrate persisted state, then prime the active-session snapshot.
+  // Progress is NOT hydrated here any more. This runs at module scope, before
+  // anyone is known to be signed in, and loading a blob at that point is what
+  // used to hand one account's points to the next. authStore drives it instead:
+  // it calls switchGamificationUser() once the persisted session is read, and
+  // again on every sign-in and sign-out.
   (async () => {
-    try {
-      const raw = await Storage.getGamification();
-      if (raw) {
-        state = sanitize(JSON.parse(raw));
-        emit();
-      }
-    } catch {
-      /* keep defaults on any parse/storage error */
-    }
-
     // If a session is already running when JS (re)loads, capture it so we can
     // still credit it on completion.
     try {
@@ -470,23 +579,43 @@ export type UseGamification = GamificationState &
 export function useGamification(): UseGamification {
   const [snap, setSnap] = useState<GamificationState>(getGamificationState());
 
+  /**
+   * Tracked as its own state, NOT read during render.
+   *
+   * Withholding does not touch `state`, so getGamificationState() hands back the
+   * same object and setSnap() bails out of the render -- the bar would keep
+   * showing the un-held total. A separate number changes identity and does not.
+   */
+  const [withheld, setWithheld] = useState<number>(getWithheldXp());
+
   useEffect(() => {
     // Belt and braces: index.js already did this at module scope, and the call
     // is idempotent, so no listener is ever registered twice.
     initializeGamification();
     // Re-sync immediately in case state changed between render and subscribe.
     setSnap(getGamificationState());
-    return subscribeGamification(() => setSnap(getGamificationState()));
+    setWithheld(getWithheldXp());
+    return subscribeGamification(() => {
+      setSnap(getGamificationState());
+      setWithheld(getWithheldXp());
+    });
   }, []);
 
   const activeSkinObj = skinById(snap.activeSkin) ?? SKINS[0];
 
+  // What the user is allowed to see yet. Never below zero, however the two
+  // values race.
+  const shownPoints = Math.max(0, snap.totalPoints - withheld);
+
   return {
     ...snap,
-    ...levelInfoFor(snap.totalPoints),
+    totalPoints: shownPoints,
+    ...levelInfoFor(shownPoints),
     skins: SKINS,
     activeSkinObj,
     activeSkinColor: activeSkinObj.color,
+    // Unlocks read the TRUE total: a skin you have already earned must not blink
+    // back to locked for the second and a bit that its XP is in the air.
     isSkinUnlocked: (id: string) => isSkinUnlocked(id, snap.totalPoints),
     setActiveSkin,
   };

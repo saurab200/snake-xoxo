@@ -2,18 +2,18 @@ import React, {useState} from 'react';
 import {LayoutChangeEvent, StyleSheet, Text, View} from 'react-native';
 import {useGamification} from '../state/gamificationStore';
 import {useNativeProgress} from '../state/nativeClock';
-import {TASK_CARD_LAYOUT} from './TaskCardOverlay';
 import {XP_BAR_HEIGHT} from './XpBarOverlay';
 
 /**
- * THE XP IN FLIGHT -- a window that exists for about a second.
+ * THE XP IN FLIGHT -- a window that exists for about three seconds.
  *
  * The task panel and the XP bar are SEPARATE system windows: one anchored to the
  * right edge, one 18dp tall across the top. Nothing can be drawn across that
  * boundary, so the XP cannot literally leave one and arrive in the other. This
  * overlay is the screen-sized stage they are both pinned to -- it goes up when a
- * task is ticked, carries the point from the row to the bar, and is removed
- * again by `Overlay.hideAfter`.
+ * task is ticked, holds the point in the middle of the screen, carries it up
+ * to the bar and leaves the encouragement in its place, then is removed again
+ * by `Overlay.hideAfter`.
  *
  * Two things here are load-bearing rather than stylistic:
  *
@@ -27,8 +27,15 @@ import {XP_BAR_HEIGHT} from './XpBarOverlay';
  *    enough. Native owns both the clock it animates on and the clock it dies on.
  */
 
-/** One flourish, start to finish. Also what hideAfter is measured against. */
-export const XP_FLIGHT_MS = 1200;
+/**
+ * One flourish, start to finish. Also what hideAfter is measured against.
+ *
+ * Three seconds, and nearly two of them are the words. The flourish used to be
+ * 1.2s of mostly travel, which was long enough to see and far too short to
+ * READ -- the sentence was gone before it had been taken in. The point of the
+ * card is the encouragement; the token is how it gets announced.
+ */
+export const XP_FLIGHT_MS = 3000;
 
 /** Grace after the last frame, so the window is not torn down mid-paint. */
 export const XP_FLIGHT_HIDE_GRACE_MS = 150;
@@ -46,7 +53,7 @@ export const XP_FLIGHT_LAYOUT = {
 /**
  * Rotated by run id, so two ticks in a row never say the same thing.
  *
- * Short enough to read in the second the card is on screen, and phrased as
+ * Short enough to read in the ~1.9s the card is on screen, and phrased as
  * "carry on" rather than "well done" -- the point of the panel is the next task,
  * not the one just cleared.
  */
@@ -60,14 +67,50 @@ export const ENCOURAGEMENTS = [
 
 /* -- the path ------------------------------------------------------------- */
 
-/** Fraction of the run the token spends travelling; the rest holds the words. */
-const FLY_FRACTION = 0.48;
+/**
+ * THE TIMELINE, in fractions of XP_FLIGHT_MS.
+ *
+ *   0                 HOLD_UNTIL            FLY_FRACTION            1
+ *   |── pop in ──┬── hold at centre ──┬── fly to the bar ──┬── words ──|
+ *                                     └── words fade in ───────────────┘
+ *
+ * The token is born in the MIDDLE OF THE SCREEN rather than at the tick box.
+ * Starting it on the row meant it launched from wherever the user's thumb was,
+ * off to one side and already moving -- easy to miss entirely. Centre-screen it
+ * gets a beat to be noticed before it goes anywhere.
+ *
+ * It then leaves, and the words take the space it was occupying. That hand-off
+ * is the whole idea: the eye is already on the centre of the screen, so the
+ * sentence appears where the user is looking instead of somewhere else.
+ */
+
+/** Token holds at centre until here -- deliberately under a second. */
+const HOLD_UNTIL = 0.27;
+
+/**
+ * When the token reaches the bar, as a fraction of the run.
+ *
+ * Exported because the bar's XP is released on arrival, not at the end of the
+ * run: everything after this is the words being read, and holding the points
+ * back for that too left a visible beat where the token had clearly landed but
+ * the bar had not moved yet.
+ */
+export const FLY_FRACTION = 0.5;
+
+/** The words: in as the token departs, out once there has been time to read. */
+const WORDS_IN_FROM = HOLD_UNTIL;
+const WORDS_IN_TO = 0.34;
+const WORDS_OUT_FROM = 0.88;
+const WORDS_OUT_TO = 0.97;
 
 /** How far above the bar the arc bulges, in dp. */
 const ARC_LIFT = 46;
 
 const TOKEN_W = 58;
 const TOKEN_H = 28;
+
+/** Tall enough for a two-line message to stay centred on the launch point. */
+const WORDS_BAND_H = 96;
 
 const easeInOut = (u: number) =>
   u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
@@ -84,22 +127,16 @@ const bezier = (p0: number, c: number, p1: number, u: number) =>
 type Props = {
   /** The native clock run this flourish paints. See src/state/nativeClock.ts. */
   runId?: number;
-  /** Where the tick control was, in TaskCardOverlay's own window coordinates. */
-  fromX?: number;
-  fromY?: number;
   /** XP actually awarded, so the token cannot claim points that were not paid. */
   amount?: number;
 };
 
 export default function XpFlightOverlay({
   runId,
-  fromX = 0,
-  fromY = 0,
   amount = 0,
 }: Props) {
-  // dp size of this window, i.e. the display minus the system bars. Every other
-  // overlay is laid out inside that same box, which is what makes the task
-  // panel's position derivable below instead of guessed.
+  // dp size of this window, i.e. the display minus the system bars. Both the
+  // centre the token launches from and the bar it lands on are derived from it.
   const [size, setSize] = useState<{w: number; h: number} | null>(null);
   const onLayout = (e: LayoutChangeEvent) =>
     setSize({
@@ -116,35 +153,42 @@ export default function XpFlightOverlay({
     return <View style={styles.root} pointerEvents="none" onLayout={onLayout} />;
   }
 
-  /* Where the row was. TASK_CARD_LAYOUT is a right-anchored, vertically
-   * centred window of a known size, so its origin inside this one is exact. */
-  const panelX = size.w - TASK_CARD_LAYOUT.x - TASK_CARD_LAYOUT.width;
-  const panelY = (size.h - TASK_CARD_LAYOUT.height) / 2;
-  const startX = panelX + fromX;
-  const startY = panelY + fromY;
+  /* Where it starts: the middle of the screen. Not the tick box -- see the
+   * timeline note above for why the row is the wrong place to launch from. */
+  const startX = size.w / 2;
+  const startY = size.h / 2;
 
-  /* Where it lands: the leading edge of the bar's fill, which the award has
-   * already moved. The point arrives exactly where the bar just grew to. */
+  /* Where it lands: the leading edge of the bar's fill as it stands NOW.
+   *
+   * The bar used to grow the instant the tick was pressed, so this aimed at the
+   * edge the award had already created. The points are now held back until the
+   * token gets here, so it aims at the edge as it is and the bar grows out from
+   * under it -- the token is delivering the XP rather than chasing it. */
   const trackLeft = 10;
   const trackWidth = size.w - 20;
   const targetX = trackLeft + clamp01(Math.max(progress, 0.02)) * trackWidth;
   const targetY = XP_BAR_HEIGHT / 2;
 
-  const fly = easeInOut(ramp(t, 0, FLY_FRACTION));
+  // 0 for the whole hold, then the journey. The token sits dead still at centre
+  // until HOLD_UNTIL rather than creeping, which is what makes the hold read as
+  // a deliberate beat instead of a slow start.
+  const fly = easeInOut(ramp(t, HOLD_UNTIL, FLY_FRACTION));
   const x = bezier(startX, startX, targetX, fly);
   const y = bezier(startY, targetY - ARC_LIFT, targetY, fly);
 
-  // Swells as it leaves the row, shrinks into the bar as it arrives.
-  const tokenScale = 0.65 + 0.55 * Math.sin(Math.PI * Math.min(fly * 1.15, 1));
-  const tokenOpacity = ramp(t, 0, 0.08) * (1 - ramp(fly, 0.86, 1));
+  // Pops in, settles to full size for the hold, then shrinks into the bar.
+  const pop = ramp(t, 0, 0.1);
+  const holdScale = 0.6 + 0.4 * easeInOut(pop);
+  const tokenScale = holdScale * (1 - 0.35 * easeInOut(fly));
+  const tokenOpacity = pop * (1 - ramp(fly, 0.86, 1));
 
   // The bar taking the hit: a ring at the landing point, once, on arrival.
   const impact = ramp(t, FLY_FRACTION - 0.04, FLY_FRACTION + 0.22);
   const impactScale = 0.3 + 2.4 * impact;
 
   const message = ENCOURAGEMENTS[(runId ?? 0) % ENCOURAGEMENTS.length];
-  const wordsIn = ramp(t, 0.1, 0.28);
-  const wordsOut = ramp(t, 0.85, 1);
+  const wordsIn = ramp(t, WORDS_IN_FROM, WORDS_IN_TO);
+  const wordsOut = ramp(t, WORDS_OUT_FROM, WORDS_OUT_TO);
   const wordsOpacity = wordsIn * (1 - wordsOut);
 
   return (
@@ -181,18 +225,22 @@ export default function XpFlightOverlay({
         <Text style={styles.tokenUnit}>XP</Text>
       </View>
 
-      <View
-        style={[
-          styles.words,
-          {
-            opacity: wordsOpacity,
-            transform: [{translateY: -10 + 10 * easeInOut(wordsIn)}],
-          },
-        ]}>
-        <View style={[styles.wordsDot, {backgroundColor: activeSkinColor}]} />
-        <Text style={styles.wordsText} numberOfLines={2}>
-          {message}
-        </Text>
+      {/* A band across the middle, so the card is centred on the point the
+          token just left whether it wraps to one line or two. */}
+      <View style={[styles.wordsBand, {top: startY - WORDS_BAND_H / 2}]}>
+        <View
+          style={[
+            styles.words,
+            {
+              opacity: wordsOpacity,
+              transform: [{translateY: 12 - 12 * easeInOut(wordsIn)}],
+            },
+          ]}>
+          <View style={[styles.wordsDot, {backgroundColor: activeSkinColor}]} />
+          <Text style={styles.wordsText} numberOfLines={2}>
+            {message}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -234,15 +282,26 @@ const styles = StyleSheet.create({
   },
 
   /**
-   * Centred under the bar the point just flew into, but BELOW the snake's own
-   * window (168px of it, ~64dp) -- the session timer and the + are live
-   * controls, and a card that sat on top of them for a second would read as the
-   * flourish breaking the UI even though touches pass straight through it.
+   * The band the words are centred in, placed on the token's launch point.
+   *
+   * They used to sit just under the XP bar, which put the sentence at the top
+   * of the screen while the eye was still down where the token had been. Now
+   * the token vacates the centre and the words move into it.
+   *
+   * Being mid-screen also keeps it clear of the snake's own window at the top,
+   * whose session timer and + are live controls -- a card parked over them
+   * reads as the flourish having broken the UI, even though every touch passes
+   * straight through this one.
    */
-  words: {
+  wordsBand: {
     position: 'absolute',
-    top: XP_BAR_HEIGHT + 96,
-    alignSelf: 'center',
+    left: 0,
+    right: 0,
+    height: WORDS_BAND_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  words: {
     maxWidth: 300,
     flexDirection: 'row',
     alignItems: 'center',

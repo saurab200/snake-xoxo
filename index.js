@@ -10,8 +10,8 @@ import {AppRegistry} from 'react-native';
 import App from './App';
 import {name as appName} from './app.json';
 
+import AddTaskOverlay from './src/overlays/AddTaskOverlay';
 import BlockOverlay from './src/overlays/BlockOverlay';
-import KillSwitchOverlay from './src/overlays/KillSwitchOverlay';
 import ReminderOverlay from './src/overlays/ReminderOverlay';
 import RewardOverlay from './src/overlays/RewardOverlay';
 import SnakeOverlay from './src/overlays/SnakeOverlay';
@@ -30,9 +30,9 @@ AppRegistry.registerComponent('SnakeOverlay', () => SnakeOverlay);
 AppRegistry.registerComponent('BlockOverlay', () => BlockOverlay);
 AppRegistry.registerComponent('WidgetOverlay', () => WidgetOverlay);
 AppRegistry.registerComponent('ReminderOverlay', () => ReminderOverlay);
-AppRegistry.registerComponent('KillSwitchOverlay', () => KillSwitchOverlay);
 AppRegistry.registerComponent('TaskCardOverlay', () => TaskCardOverlay);
 AppRegistry.registerComponent('XpBarOverlay', () => XpBarOverlay);
+AppRegistry.registerComponent('AddTaskOverlay', () => AddTaskOverlay);
 AppRegistry.registerComponent('XpFlightOverlay', () => XpFlightOverlay);
 AppRegistry.registerComponent('RewardOverlay', () => RewardOverlay);
 

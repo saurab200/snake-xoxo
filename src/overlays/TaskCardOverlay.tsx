@@ -1,7 +1,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
-  GestureResponderEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,13 +16,14 @@ import {
 } from '../integrations/tasks';
 import {TodoItem} from '../integrations/types';
 import {
-  XP_PER_TASK,
   completeTask,
-  uncompleteTask,
+  releaseWithheldXp,
   useGamification,
+  withholdXp,
 } from '../state/gamificationStore';
 import {startNativeRun, useNativeProgress} from '../state/nativeClock';
 import {
+  FLY_FRACTION,
   XP_FLIGHT_HIDE_GRACE_MS,
   XP_FLIGHT_LAYOUT,
   XP_FLIGHT_MS,
@@ -62,16 +62,15 @@ export const TASK_CARD_LAYOUT_MIN = {
   focusable: false,
 };
 
-type Tab = 'todo' | 'done';
 
 /**
  * The tick that is currently being celebrated.
  *
- * The XP lands in the store the instant the control is pressed, so without this
- * the row would vanish on the same frame and there would be nothing to animate.
- * The row is held in the list for the length of the run and cleared by the run's
- * final frame -- a native event, because the JS timer that would normally do it
- * never fires while Tether is backgrounded.
+ * The XP is banked the instant the control is pressed, so without this the row
+ * would vanish on the same frame and there would be nothing to animate. The row
+ * is held until ROW_EXIT_T of the run and cleared from a native event, because
+ * the JS timer that would normally do it never fires while Tether is
+ * backgrounded.
  */
 type Flight = {taskId: string; runId: number};
 
@@ -80,9 +79,13 @@ type Flight = {taskId: string; runId: number};
  *
  * The row leaves when its own exit is finished rather than when the flourish is,
  * so the list closes up behind it instead of holding an empty section header for
- * the rest of the second.
+ * the rest of the run.
+ *
+ * Tied to real milliseconds, not to the flourish: when the run grew from 1.2s to
+ * 3s this was 0.45, which quietly turned a ~540ms exit into a ~1.35s one and
+ * left the row sitting there long after the tick. ~540ms of a 3s run is 0.18.
  */
-const ROW_EXIT_T = 0.45;
+const ROW_EXIT_T = 0.18;
 
 type Props = {
   /**
@@ -96,7 +99,6 @@ type Props = {
 export default function TaskCardOverlay({nonce}: Props) {
   const [sections, setSections] = useState<TaskSection[] | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [tab, setTab] = useState<Tab>('todo');
   const [loading, setLoading] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [flight, setFlight] = useState<Flight | null>(null);
@@ -114,11 +116,32 @@ export default function TaskCardOverlay({nonce}: Props) {
     flight?.runId ?? null,
   );
 
+  // The token reaches the bar at FLY_FRACTION, not at the end of the run -- the
+  // rest is the impact ring and the words. Releasing on arrival is what makes
+  // the bar grow as the point touches it instead of half a second later.
+  const landed = flight !== null && (flightT ?? 0) >= FLY_FRACTION;
+
+  useEffect(() => {
+    if (landed) {
+      releaseWithheldXp();
+    }
+  }, [landed]);
+
   useEffect(() => {
     if (flight && flightDone) {
       setFlight(null);
     }
   }, [flight, flightDone]);
+
+  /**
+   * Never leave XP stranded in the air.
+   *
+   * The run is native, but the release is driven from this component -- so if
+   * the panel is torn down mid-flight (minimised, session ended, overlay hidden)
+   * nothing would ever land it and the bar would under-report until the next
+   * reload. The points themselves were always safe; only the display was held.
+   */
+  useEffect(() => releaseWithheldXp, []);
 
   const load = useCallback(async (force: boolean) => {
     setLoading(true);
@@ -171,20 +194,18 @@ export default function TaskCardOverlay({nonce}: Props) {
   /**
    * Ticking a task pays out XP and sends it to the bar at the top of the screen.
    *
-   * `where` is the tick control's position in THIS window's coordinates, taken
-   * from the touch itself. The flight overlay converts it: the panel is a
-   * right-anchored window of a known size, so its origin on screen is exact.
+   * The flourish no longer needs to know where the row was: the token is born
+   * in the middle of the screen, so there is no touch position to plumb through.
    *
    * Nothing here is timed in JS. The flourish runs on a native clock and the
    * overlay carrying it is removed by a native `hideAfter`, so a JS thread that
    * never wakes again costs an animation, not a window stuck over the screen.
    */
-  const toggle = (item: TodoItem, where: {x: number; y: number}) => {
-    if (isDone(item.id)) {
-      uncompleteTask(item.id);
-      return;
-    }
-
+  const toggle = (item: TodoItem) => {
+    // No un-ticking: a cleared task leaves the list and there is no longer a
+    // screen that shows it again, so the only direction is done. completeTask()
+    // is still the guard against double payment.
+    //
     // 0 means it was already credited -- skip the flourish rather than claim
     // points that were not paid.
     const awarded = completeTask(item.id);
@@ -192,13 +213,15 @@ export default function TaskCardOverlay({nonce}: Props) {
       return;
     }
 
+    // Bank the points but keep them off the bar until the token gets there,
+    // so the flight is what delivers the XP rather than a victory lap after it.
+    withholdXp(awarded);
+
     const runId = startNativeRun(XP_FLIGHT_MS);
     setFlight({taskId: item.id, runId});
 
     Overlay.show('XpFlightOverlay', XP_FLIGHT_LAYOUT, {
       runId,
-      fromX: where.x,
-      fromY: where.y,
       amount: awarded,
     }).catch(() => {});
     Overlay.hideAfter(
@@ -211,16 +234,14 @@ export default function TaskCardOverlay({nonce}: Props) {
   const clearingId =
     flight && (flightT ?? 0) < ROW_EXIT_T ? flight.taskId : null;
 
-  // Outstanding vs cleared, from the same fetched list. The row being ticked
-  // stays where it was until it has finished animating away.
+  // Only what is still outstanding. A ticked task is gone for good: the payout
+  // already told the story -- the flourish, the XP, the row emptying out -- and
+  // a list of things you have finished with is one more place to look for
+  // nothing. The row being ticked stays put until it has animated away.
   const visible: TaskSection[] = (sections ?? [])
     .map(s => ({
       ...s,
-      items: s.items.filter(i =>
-        tab === 'done'
-          ? isDone(i.id) && i.id !== clearingId
-          : !isDone(i.id) || i.id === clearingId,
-      ),
+      items: s.items.filter(i => !isDone(i.id) || i.id === clearingId),
     }))
     .filter(s => s.items.length > 0);
 
@@ -255,20 +276,9 @@ export default function TaskCardOverlay({nonce}: Props) {
   return (
     <View style={styles.root} pointerEvents="box-none">
       <View style={styles.header}>
-        <View style={styles.tabBar}>
-          <TabButton
-            label="To do"
-            count={outstanding}
-            active={tab === 'todo'}
-            onPress={() => setTab('todo')}
-          />
-          <TabButton
-            label="Done"
-            count={completedTaskIds.length}
-            active={tab === 'done'}
-            onPress={() => setTab('done')}
-          />
-        </View>
+        <Text style={styles.title}>
+          To do{outstanding > 0 ? ` ${outstanding}` : ''}
+        </Text>
 
         <TouchableOpacity style={styles.minimize} onPress={minimize} hitSlop={HIT}>
           <Text style={styles.minimizeGlyph}>›</Text>
@@ -285,13 +295,9 @@ export default function TaskCardOverlay({nonce}: Props) {
           </View>
         ) : total === 0 ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyTitle}>
-              {tab === 'done' ? 'Nothing ticked yet' : 'All clear'}
-            </Text>
+            <Text style={styles.emptyTitle}>All clear</Text>
             <Text style={styles.emptyBody}>
-              {tab === 'done'
-                ? `Each task you tick is worth ${XP_PER_TASK} XP.`
-                : 'Connect an app on the Apps tab, or add a task.'}
+              Connect an app on the Apps tab, or add a task.
             </Text>
           </View>
         ) : (
@@ -320,7 +326,7 @@ export default function TaskCardOverlay({nonce}: Props) {
                       item={item}
                       done={isDone(item.id)}
                       clearing={item.id === clearingId ? flightT ?? 0 : null}
-                      onToggle={where => toggle(item, where)}
+                      onToggle={() => toggle(item)}
                     />
                   ))}
             </View>
@@ -341,29 +347,6 @@ export default function TaskCardOverlay({nonce}: Props) {
   );
 }
 
-function TabButton({
-  label,
-  count,
-  active,
-  onPress,
-}: {
-  label: string;
-  count: number;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      style={[styles.tab, active && styles.tabActive]}
-      activeOpacity={0.8}
-      onPress={onPress}>
-      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
-        {label}
-        {count > 0 ? ` ${count}` : ''}
-      </Text>
-    </TouchableOpacity>
-  );
-}
 
 /**
  * A row, and the tick box in its corner.
@@ -385,15 +368,9 @@ function TaskRow({
   item: TodoItem;
   done: boolean;
   clearing: number | null;
-  onToggle: (where: {x: number; y: number}) => void;
+  onToggle: () => void;
 }) {
   const stamp = formatDueStamp(item.dueAtMs);
-
-  // Captured on touch-down: the flight has to start from the exact pixel the
-  // finger left, and onPress alone does not carry a position.
-  const [where, setWhere] = useState({x: 0, y: 0});
-  const takePosition = (e: GestureResponderEvent) =>
-    setWhere({x: e.nativeEvent.pageX, y: e.nativeEvent.pageY});
 
   const c = clearing ?? 0;
   const ticked = done || clearing !== null;
@@ -436,8 +413,7 @@ function TaskRow({
         style={styles.tickTarget}
         activeOpacity={0.7}
         hitSlop={HIT}
-        onPressIn={takePosition}
-        onPress={() => onToggle(where)}>
+        onPress={onToggle}>
         <View
           style={[
             styles.tickBox,
@@ -465,24 +441,19 @@ const styles = StyleSheet.create({
    */
   root: {flex: 1},
 
+  title: {
+    flex: 1,
+    color: '#e2e8f0',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginBottom: 8,
   },
-  tabBar: {flexDirection: 'row', gap: 6, flex: 1},
-  tab: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 11,
-    backgroundColor: 'rgba(15,23,42,0.78)',
-    borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.25)',
-  },
-  tabActive: {backgroundColor: '#1d4ed8', borderColor: '#1d4ed8'},
-  tabLabel: {color: '#94a3b8', fontSize: 11, fontWeight: '700'},
-  tabLabelActive: {color: '#ffffff'},
 
   minimize: {
     width: 26,
